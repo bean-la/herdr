@@ -51,7 +51,7 @@ jobs:
       - name: Build + install + stale-detect + notify
         shell: bash -eo pipefail {0}
         run: |
-          OUT="$(ssh "${HERM_HOST}" "sudo -u herm -H bash -lc 'cd /home/herm/repos/github.com/bean-la/herdr && git fetch origin settled-merge-v0.8.0 && git show FETCH_HEAD:scripts/remote/brndr-install.sh > /tmp/brndr-install.sh && bash /tmp/brndr-install.sh ${GITHUB_SHA}'")"
+          OUT="$(ssh "${HERM_HOST}" "sudo -u herm -H bash -lc 'cd /home/herm/repos/github.com/bean-la/herdr && git fetch bean-la settled-merge-v0.8.0 && git show FETCH_HEAD:scripts/remote/brndr-install.sh > /tmp/brndr-install.sh && bash /tmp/brndr-install.sh ${GITHUB_SHA}'")"
           echo "$OUT"
           if grep -q 'restart_required=1' <<< "$OUT"; then
             echo "::warning::brndr installed, but a running server still maps the replaced binary. Operator must restart the brn session server to load the new build."

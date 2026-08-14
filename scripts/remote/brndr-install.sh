@@ -34,7 +34,7 @@ log() { printf '[brndr-install] %s\n' "$*"; }
 
 # ── 1. fetch + clean detached worktree ─────────────────────────────────
 log "fetch origin settled-merge-v0.8.0 in ${FORK}"
-git -C "$FORK" fetch origin settled-merge-v0.8.0
+git -C "$FORK" fetch bean-la settled-merge-v0.8.0
 if [[ -d "$WORKTREE" ]]; then
   log "worktree exists at $WORKTREE — checking out $SHA (detached)"
   git -C "$WORKTREE" checkout -q --detach "$SHA" 2>/dev/null || true
@@ -45,7 +45,7 @@ fi
 # ── 2. build release ───────────────────────────────────────────────────
 cd "$WORKTREE"
 log "cargo build --release ($(cargo --version) | zig $(zig version))"
-cargo build --release
+HERDR_BUILD_ID="${SHA:0:8}" cargo build --release   # stamp the version (build_info.rs option_env)
 
 BUILT="$WORKTREE/target/release/brndr"
 [[ -x "$BUILT" ]] || { log "ERROR: no release/brndr in build output"; exit 1; }
