@@ -87,7 +87,7 @@ impl App {
             return;
         }
         self.last_git_remote_status_refresh = now
-            .checked_sub(GIT_REMOTE_STATUS_REFRESH_INTERVAL)
+            .checked_sub(*GIT_REMOTE_STATUS_REFRESH_INTERVAL)
             .unwrap_or(now);
         self.git_refresh_due_after_in_flight = false;
     }
@@ -96,7 +96,7 @@ impl App {
         (!self.git_refresh_in_flight
             && !self.state.workspaces.is_empty()
             && (self.git_identity_refresh_requested || !self.git_refresh_demand().is_empty()))
-        .then_some(self.last_git_remote_status_refresh + GIT_REMOTE_STATUS_REFRESH_INTERVAL)
+        .then_some(self.last_git_remote_status_refresh + *GIT_REMOTE_STATUS_REFRESH_INTERVAL)
     }
 
     fn git_refresh_demand(&self) -> GitStatusRefreshDemand {
@@ -324,7 +324,7 @@ mod tests {
         let mut app = test_app(&config);
         app.state.workspaces.push(Workspace::test_new("test"));
         let now = Instant::now();
-        app.last_git_remote_status_refresh = now - GIT_REMOTE_STATUS_REFRESH_INTERVAL;
+        app.last_git_remote_status_refresh = now - *GIT_REMOTE_STATUS_REFRESH_INTERVAL;
 
         app.start_git_status_refresh_if_due(now);
 
@@ -412,7 +412,7 @@ mod tests {
         let mut app = test_app(&crate::config::Config::default());
         app.state.workspaces.push(Workspace::test_new("test"));
         let now = Instant::now();
-        app.last_git_remote_status_refresh = now - GIT_REMOTE_STATUS_REFRESH_INTERVAL;
+        app.last_git_remote_status_refresh = now - *GIT_REMOTE_STATUS_REFRESH_INTERVAL;
 
         assert_eq!(
             app.next_headless_loop_deadline_with_git_refresh(now, false, false),

@@ -30,12 +30,29 @@ use std::collections::{HashMap, HashSet};
 use std::future::pending;
 use std::io::{self, Write};
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
-const MIN_RENDER_INTERVAL: Duration = Duration::from_millis(16);
+// Lazy-render default (30fps — plenty for terminal output; env-tunable).
+// HERDR_MIN_RENDER_INTERVAL_MS overrides; the 60fps stock rate saturated the
+// main loop with 10+ active panes (deploydaddy 2026-08-14, typing stutter).
+static MIN_RENDER_INTERVAL: LazyLock<Duration> = LazyLock::new(|| Duration::from_millis(
+    std::env::var("HERDR_MIN_RENDER_INTERVAL_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(33),
+));
 pub(crate) const SELECTION_AUTOSCROLL_INTERVAL: Duration = Duration::from_millis(30);
 const RESIZE_POLL_INTERVAL: Duration = Duration::from_millis(100);
-const GIT_REMOTE_STATUS_REFRESH_INTERVAL: Duration = Duration::from_millis(1500);
+// Lazy git remote-status refresh (handoff 20260813T2225Z: stock 1500ms poll
+// was the #1 CPU loop — ~13.5 gitconfig opens/s with 20 panes). Default 30s,
+// env-tunable via HERDR_GIT_REMOTE_REFRESH_MS.
+static GIT_REMOTE_STATUS_REFRESH_INTERVAL: LazyLock<Duration> = LazyLock::new(|| Duration::from_millis(
+    std::env::var("HERDR_GIT_REMOTE_REFRESH_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30_000),
+));
 const GIT_REPO_DISCOVERY_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const AUTO_UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(30 * 60);
 const PENDING_AGENT_RESUME_THEME_WAIT: Duration = Duration::from_millis(750);
@@ -727,7 +744,7 @@ impl App {
             terminal_runtimes: restored_terminal_runtimes,
             event_tx,
             event_rx,
-            last_git_remote_status_refresh: Instant::now() - GIT_REMOTE_STATUS_REFRESH_INTERVAL,
+            last_git_remote_status_refresh: Instant::now() - *GIT_REMOTE_STATUS_REFRESH_INTERVAL,
             last_git_repo_discovery_refresh: Instant::now(),
             git_refresh_in_flight: false,
             git_refresh_due_after_in_flight: false,
