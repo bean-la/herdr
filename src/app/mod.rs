@@ -402,6 +402,8 @@ impl App {
             sidebar_width_source,
             sidebar_section_split,
             collapsed_space_keys,
+            pinned,
+            pinned_panes,
         ) = if no_session {
             (
                 Vec::new(),
@@ -411,6 +413,8 @@ impl App {
                 state::SidebarWidthSource::ConfigDefault,
                 0.5_f32,
                 std::collections::HashSet::new(),
+                Vec::new(),
+                std::collections::HashMap::new(),
             )
         } else if let Some(snap) = crate::persist::load() {
             let history = config
@@ -418,7 +422,7 @@ impl App {
                 .pane_history
                 .then(crate::persist::load_history)
                 .flatten();
-            let (ws, terminals, terminal_runtimes) = crate::persist::restore(
+            let (ws, terminals, terminal_runtimes, pinned, pinned_panes) = crate::persist::restore(
                 &snap,
                 history.as_ref(),
                 24,
@@ -447,6 +451,8 @@ impl App {
                     },
                     snap.sidebar_section_split.unwrap_or(0.5),
                     snap.collapsed_space_keys,
+                    Vec::new(),
+                    std::collections::HashMap::new(),
                 )
             } else {
                 crate::logging::session_restored(ws.len(), "ok");
@@ -464,6 +470,8 @@ impl App {
                     },
                     snap.sidebar_section_split.unwrap_or(0.5),
                     snap.collapsed_space_keys,
+                    pinned,
+                    pinned_panes,
                 )
             }
         } else {
@@ -475,6 +483,8 @@ impl App {
                 state::SidebarWidthSource::ConfigDefault,
                 0.5_f32,
                 std::collections::HashSet::new(),
+                Vec::new(),
+                std::collections::HashMap::new(),
             )
         };
 
@@ -540,6 +550,8 @@ impl App {
             public_pane_id_aliases: std::collections::HashMap::new(),
             workspaces,
             active,
+            pinned,
+            pinned_panes,
             previous_pane_focus: None,
             selected,
             mode,
@@ -703,6 +715,14 @@ impl App {
 
         state.terminals = restored_terminals;
 
+        // Session-level pins get stable public aliases (pin:1, pin:2, …) so
+        // unpin/read/send resolve them after a restore.
+        for (i, pin) in state.pinned.iter().enumerate() {
+            state
+                .public_pane_id_aliases
+                .insert(format!("pin:{}", i + 1), pin.pane_id);
+        }
+
         for ws_idx in 0..state.workspaces.len() {
             let cwd = state.workspaces[ws_idx]
                 .resolved_identity_cwd_from(&state.terminals, &restored_terminal_runtimes);
@@ -805,7 +825,7 @@ impl App {
         >,
     ) -> io::Result<Self> {
         let mut app = Self::new(config, true, config_diagnostic, api_rx, event_hub);
-        let (workspaces, terminals, runtimes) = crate::persist::restore_handoff(
+        let (workspaces, terminals, runtimes, pinned, pinned_panes) = crate::persist::restore_handoff(
             snapshot,
             config.advanced.scrollback_limit_bytes,
             &config.terminal.default_shell,
@@ -833,6 +853,13 @@ impl App {
         app.state.detach_exits = false;
         app.state.pane_id_aliases = pane_id_aliases;
         app.state.workspaces = workspaces;
+        app.state.pinned = pinned;
+        app.state.pinned_panes = pinned_panes;
+        for (i, pin) in app.state.pinned.iter().enumerate() {
+            app.state
+                .public_pane_id_aliases
+                .insert(format!("pin:{}", i + 1), pin.pane_id);
+        }
         app.state.terminals = terminals;
         app.terminal_runtimes = runtimes.into();
         app.state.active = snapshot

@@ -1,7 +1,7 @@
 use crate::api::schema::{
-    EmptyParams, Method, PaneFocusDirectionParams, PaneMoveParams, PaneRenameParams,
-    PaneResizeParams, PaneSplitParams, PaneSwapParams, PaneTarget, PaneZoomParams, Request,
-    TabCreateParams, TabListParams, TabRenameParams, TabTarget, WorkspaceCreateParams,
+    EmptyParams, Method, PaneFocusDirectionParams, PaneMoveParams, PanePinParams, PaneRenameParams,
+    PaneResizeParams, PaneSplitParams, PaneSwapParams, PaneTarget, PaneUnpinParams, PaneZoomParams,
+    Request, TabCreateParams, TabListParams, TabRenameParams, TabTarget, WorkspaceCreateParams,
     WorkspaceRenameParams, WorkspaceTarget, WorktreeCreateParams, WorktreeListParams,
     WorktreeOpenParams, WorktreeRemoveParams,
 };
@@ -107,6 +107,14 @@ pub(super) fn pane_rename(params: PaneRenameParams) -> std::io::Result<i32> {
 
 pub(super) fn pane_split(params: PaneSplitParams) -> std::io::Result<i32> {
     print_method_response("cli:pane:split", Method::PaneSplit(params))
+}
+
+pub(super) fn pane_pin(params: PanePinParams) -> std::io::Result<i32> {
+    print_method_response("cli:pane:pin", Method::PanePin(params))
+}
+
+pub(super) fn pane_unpin(params: PaneUnpinParams) -> std::io::Result<i32> {
+    print_method_response("cli:pane:unpin", Method::PaneUnpin(params))
 }
 
 pub(super) fn pane_swap(params: PaneSwapParams) -> std::io::Result<i32> {

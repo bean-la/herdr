@@ -77,6 +77,7 @@ mod metadata_tokens;
 mod noninteractive_process;
 mod pane;
 mod persist;
+mod pinned;
 mod platform;
 mod plugin_command;
 mod plugin_paths;
