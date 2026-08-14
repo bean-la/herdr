@@ -63,12 +63,13 @@ pub(crate) fn compute_tab_surface_for(
             .tabs
             .get(target.tab_index)
     });
+    let (tab_area, _) = crate::pinned::split_pinned_area(&app.pinned, area);
     let split_borders = tab
         .map(|tab| {
             if tab.zoomed {
                 Vec::new()
             } else {
-                tab.layout.splits(area)
+                tab.layout.splits(tab_area)
             }
         })
         .unwrap_or_default();
