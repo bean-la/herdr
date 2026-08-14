@@ -210,6 +210,31 @@ impl App {
         encode_success(id, ResponseResult::Ok {})
     }
 
+    /// Resolve a raw pane id (workspace pane OR session-pinned pane) to its
+    /// terminal runtime sender. Pinned panes are not in any workspace, so
+    /// parse_pane_id (workspace-scoped) fails for them — resolve via the
+    /// public alias map first, then try workspace then pinned lookup.
+    fn lookup_pane_sender(&self, raw_id: &str) -> Option<&crate::terminal::TerminalRuntime> {
+        let pane_id = self
+            .state
+            .public_pane_id_aliases
+            .get(raw_id)
+            .copied()
+            .or_else(|| self.parse_pane_id(raw_id).map(|(_, id)| id))?;
+        if let Some((ws_idx, _)) = self.find_pane(pane_id) {
+            if let Some(rt) = self.lookup_runtime_sender(ws_idx, pane_id) {
+                return Some(rt);
+            }
+        }
+        let terminal_id = self
+            .state
+            .pinned_panes
+            .get(&pane_id)?
+            .attached_terminal_id
+            .clone();
+        self.terminal_runtimes.get(&terminal_id)
+    }
+
     pub(super) fn handle_pane_list(&mut self, id: String, params: PaneListParams) -> String {
         match self.collect_panes_for_workspace(params.workspace_id.as_deref()) {
             Ok(panes) => encode_success(id, ResponseResult::PaneList { panes }),
@@ -1250,6 +1275,39 @@ impl App {
     }
 
     pub(super) fn handle_pane_read(&mut self, id: String, params: PaneReadParams) -> String {
+        // Session-pinned panes are not in any workspace — read them via the
+        // alias map + pinned state directly.
+        if let Some(pane_id) = self.state.public_pane_id_aliases.get(&params.pane_id).copied() {
+            if let Some(pane_state) = self.state.pinned_panes.get(&pane_id) {
+                let Some(runtime) = self
+                    .terminal_runtimes
+                    .get(&pane_state.attached_terminal_id)
+                else {
+                    return pane_not_found(id, &params.pane_id);
+                };
+                let snapshot = crate::app::api_helpers::read_terminal_snapshot(
+                    runtime,
+                    params.source,
+                    params.format,
+                    params.lines,
+                );
+                return encode_success(
+                    id,
+                    ResponseResult::PaneRead {
+                        read: PaneReadResult {
+                            pane_id: params.pane_id.clone(),
+                            workspace_id: String::new(),
+                            tab_id: String::from("pinned"),
+                            source: params.source,
+                            format: params.format,
+                            text: snapshot.text,
+                            revision: 0,
+                            truncated: snapshot.truncated,
+                        },
+                    },
+                );
+            }
+        }
         let Some((ws_idx, pane_id)) = self.parse_pane_id(&params.pane_id) else {
             return pane_not_found(id, &params.pane_id);
         };
@@ -1566,10 +1624,7 @@ impl App {
         id: String,
         params: PaneSendTextParams,
     ) -> String {
-        let Some((ws_idx, pane_id)) = self.parse_pane_id(&params.pane_id) else {
-            return pane_not_found(id, &params.pane_id);
-        };
-        let Some(runtime) = self.lookup_runtime_sender(ws_idx, pane_id) else {
+        let Some(runtime) = self.lookup_pane_sender(&params.pane_id) else {
             return pane_not_found(id, &params.pane_id);
         };
         if let Err(err) = runtime.try_send_bytes(Bytes::from(params.text)) {
@@ -1584,10 +1639,7 @@ impl App {
         id: String,
         params: PaneSendInputParams,
     ) -> String {
-        let Some((ws_idx, pane_id)) = self.parse_pane_id(&params.pane_id) else {
-            return pane_not_found(id, &params.pane_id);
-        };
-        let Some(runtime) = self.lookup_runtime_sender(ws_idx, pane_id) else {
+        let Some(runtime) = self.lookup_pane_sender(&params.pane_id) else {
             return pane_not_found(id, &params.pane_id);
         };
         let bytes = match super::super::api_helpers::encode_api_input(
@@ -1682,10 +1734,7 @@ impl App {
         id: String,
         params: PaneSendKeysParams,
     ) -> String {
-        let Some((ws_idx, pane_id)) = self.parse_pane_id(&params.pane_id) else {
-            return pane_not_found(id, &params.pane_id);
-        };
-        let Some(runtime) = self.lookup_runtime_sender(ws_idx, pane_id) else {
+        let Some(runtime) = self.lookup_pane_sender(&params.pane_id) else {
             return pane_not_found(id, &params.pane_id);
         };
         let encoded_keys = match encode_api_keys(runtime, &params.keys) {
