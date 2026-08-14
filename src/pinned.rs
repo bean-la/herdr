@@ -10,9 +10,11 @@ use ratatui::layout::Rect;
 use crate::layout::PaneId;
 
 /// Which edge a pinned pane claims.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PinnedSide {
     /// Right column (sidebar).
+    #[default]
     Right,
     /// Bottom row (horizontal bar).
     Down,

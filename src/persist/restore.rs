@@ -47,6 +47,8 @@ type RestoredSession = (
     Vec<Workspace>,
     HashMap<TerminalId, TerminalState>,
     HashMap<TerminalId, TerminalRuntime>,
+    Vec<crate::pinned::PinnedPane>,
+    HashMap<crate::layout::PaneId, crate::pane::PaneState>,
 );
 type RestoredWorkspace = (
     Workspace,
@@ -76,7 +78,7 @@ pub fn restore(
     render_dirty: Arc<RenderSignal>,
 ) -> RestoredSession {
     let mut imported_panes = HashMap::new();
-    restore_with_imports(
+    let restored = restore_with_imports(
         snapshot,
         history,
         rows,
@@ -88,7 +90,8 @@ pub fn restore(
         events,
         render_notify,
         render_dirty,
-    )
+    );
+    restored
 }
 
 #[cfg(unix)]
@@ -254,6 +257,162 @@ fn restore_with_imports(
     .0
 }
 
+/// Restore session-level pinned panes — launch their terminals and re-home
+/// them into the pin set. Mirrors restore_tab's per-pane launch path (no
+/// layout/remap: pinned panes are not in any tab).
+fn restore_pinned_panes(
+    snap_pinned: &[crate::persist::snapshot::PinnedPaneSnapshot],
+    rows: u16,
+    cols: u16,
+    runtime_context: &RestoreRuntimeContext<'_>,
+    resumed_agent_sessions: &mut HashSet<String>,
+) -> (
+    Vec<crate::pinned::PinnedPane>,
+    HashMap<crate::layout::PaneId, crate::pane::PaneState>,
+    Vec<TerminalState>,
+    HashMap<TerminalId, TerminalRuntime>,
+) {
+    let mut pinned = Vec::new();
+    let mut pinned_panes = HashMap::new();
+    let mut terminals = Vec::new();
+    let mut terminal_runtimes = HashMap::new();
+    for (index, pin_snap) in snap_pinned.iter().enumerate() {
+        let Some(saved_pane) = pin_snap.pane.as_ref() else {
+            continue;
+        };
+        let pane_id = crate::layout::PaneId::alloc();
+        let saved_cwd = saved_pane.cwd.clone();
+        let cwd = if saved_cwd.exists() {
+            saved_cwd
+        } else {
+            let home = std::env::var("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from("/"));
+            if home.exists() {
+                home
+            } else {
+                PathBuf::from("/")
+            }
+        };
+        let saved_label = saved_pane.label.clone();
+        let saved_agent_name = saved_pane.agent_name.clone();
+        let saved_managed_agent = saved_pane
+            .managed_agent_kind
+            .as_deref()
+            .and_then(crate::detect::parse_canonical_agent_label);
+        let saved_launch_argv = saved_pane.launch_argv.clone();
+        let saved_agent_session = saved_pane.agent_session.as_ref();
+        let startup = {
+            let mut agent_restore = AgentRestoreState {
+                enabled: runtime_context.resume_agents_on_restore,
+                resumed_sessions: resumed_agent_sessions,
+            };
+            pane_restore_startup(saved_agent_session, None, &mut agent_restore)
+        };
+        let restored_agent_session =
+            restored_terminal_agent_session(saved_agent_session, startup.duplicate_agent_session);
+        let initial_restore_agent = startup
+            .restore_plan
+            .as_ref()
+            .and_then(|plan| crate::detect::parse_agent_label(&plan.agent));
+        let public_pane_id = format!("pin:{}", index + 1);
+        let launch_env = PaneLaunchEnv::from_extra(Vec::new()).with_identity(
+            "pinned".to_string(),
+            "pinned".to_string(),
+            public_pane_id,
+        );
+        if let Some(plan) = startup.restore_plan.clone() {
+            let terminal_id = TerminalId::alloc();
+            let mut terminal = TerminalState::new(terminal_id.clone(), cwd.clone())
+                .with_pending_agent_resume_plan(plan);
+            if let Some(label) = saved_label {
+                terminal.set_manual_label(label);
+            }
+            if let Some(session) = restored_agent_session {
+                terminal.set_persisted_agent_session(session);
+            }
+            match (saved_agent_name, saved_managed_agent) {
+                (Some(agent_name), Some(agent)) => {
+                    terminal.restore_managed_agent(agent_name, agent)
+                }
+                _ => {}
+            }
+            if let Some(agent) = initial_restore_agent {
+                let _ = terminal.set_detected_state_with_screen_signals_at(
+                    Some(agent),
+                    AgentState::Idle,
+                    false,
+                    false,
+                    false,
+                    false,
+                    std::time::Instant::now(),
+                );
+            }
+            pinned_panes.insert(pane_id, PaneState::new(terminal_id));
+            terminals.push(terminal);
+        } else {
+            match TerminalRuntime::spawn_with_initial_history(
+                pane_id,
+                rows,
+                cols,
+                cwd.clone(),
+                runtime_context.scrollback_limit_bytes,
+                crate::terminal_theme::TerminalTheme::default(),
+                None,
+                runtime_context.shell_config,
+                &launch_env,
+                startup.initial_history_ansi,
+                runtime_context.events.clone(),
+                runtime_context.render_notify.clone(),
+                runtime_context.render_dirty.clone(),
+            ) {
+                Ok(runtime) => {
+                    let terminal_id = TerminalId::alloc();
+                    let mut terminal = TerminalState::new(terminal_id.clone(), cwd.clone());
+                    if let Some(argv) = saved_launch_argv {
+                        terminal = terminal.with_launch_argv(argv).with_respawn_shell_on_exit();
+                    }
+                    if let Some(label) = saved_label {
+                        terminal.set_manual_label(label);
+                    }
+                    if let Some(session) = restored_agent_session {
+                        terminal.set_persisted_agent_session(session);
+                    }
+                    match (saved_agent_name, saved_managed_agent) {
+                        (Some(agent_name), Some(agent)) => {
+                            terminal.restore_managed_agent(agent_name, agent)
+                        }
+                        _ => {}
+                    }
+                    if let Some(agent) = initial_restore_agent {
+                        let _ = terminal.set_detected_state_with_screen_signals_at(
+                            Some(agent),
+                            AgentState::Idle,
+                            false,
+                            false,
+                            false,
+                            false,
+                            std::time::Instant::now(),
+                        );
+                    }
+                    pinned_panes.insert(pane_id, PaneState::new(terminal_id.clone()));
+                    terminal_runtimes.insert(terminal_id.clone(), runtime);
+                    terminals.push(terminal);
+                }
+                Err(err) => {
+                    warn!(pane = pane_id.raw(), err = %err, "failed to restore pinned pane");
+                }
+            }
+        }
+        pinned.push(crate::pinned::PinnedPane {
+            pane_id,
+            side: pin_snap.side,
+            ratio: pin_snap.ratio,
+        });
+    }
+    (pinned, pinned_panes, terminals, terminal_runtimes)
+}
+
 fn restore_with_imports_and_failures(
     snapshot: &SessionSnapshot,
     history: Option<&SessionHistorySnapshot>,
@@ -300,7 +459,29 @@ fn restore_with_imports_and_failures(
         }
     }
     crate::workspace::reserve_workspace_ids(&workspaces);
-    ((workspaces, terminals, terminal_runtimes), failed_imports)
+
+    // Session-level pinned panes restore alongside the workspaces.
+    let runtime_context = RestoreRuntimeContext {
+        scrollback_limit_bytes,
+        shell_config,
+        resume_agents_on_restore,
+        events,
+        render_notify,
+        render_dirty,
+    };
+    let (pinned, pinned_panes, pinned_terminals, pinned_runtimes) = restore_pinned_panes(
+        &snapshot.pinned,
+        rows,
+        cols,
+        &runtime_context,
+        &mut resumed_agent_sessions,
+    );
+    for terminal in pinned_terminals {
+        terminals.insert(terminal.id.clone(), terminal);
+    }
+    terminal_runtimes.extend(pinned_runtimes);
+
+    ((workspaces, terminals, terminal_runtimes, pinned, pinned_panes), failed_imports)
 }
 
 fn restore_workspace(
@@ -1556,7 +1737,8 @@ mod tests {
             "native agent restore should not spawn a fallback-size runtime during snapshot restore"
         );
         let mut imports = HashMap::new();
-        let (_handoff_workspaces, handoff_terminals, handoff_runtimes) = restore_handoff(
+        let (_handoff_workspaces, handoff_terminals, handoff_runtimes, _handoff_pinned, _handoff_pinned_panes) =
+            restore_handoff(
             &snapshot,
             0,
             test_restore_shell(),
