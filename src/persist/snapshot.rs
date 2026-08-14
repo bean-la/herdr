@@ -621,6 +621,11 @@ mod tests {
             terminal_runtimes,
             state.active,
             state.selected,
+            state.sidebar_width,
+            state.sidebar_section_split,
+            state.collapsed_space_keys.clone(),
+            &state.pinned,
+            &state.pinned_panes,
         )
     }
 
@@ -679,6 +684,7 @@ mod tests {
     fn round_trip_empty_session() {
         let snap = SessionSnapshot {
             version: SNAPSHOT_VERSION,
+            pinned: vec![],
             workspaces: vec![],
             active: None,
             selected: 0,
@@ -773,6 +779,7 @@ mod tests {
             sidebar_section_split: Some(0.5),
             collapsed_space_keys: std::collections::HashSet::new(),
             version: SNAPSHOT_VERSION,
+            pinned: vec![],
         };
 
         let json = serde_json::to_string_pretty(&snap).unwrap();
@@ -1310,6 +1317,7 @@ mod tests {
 
         let snap = SessionSnapshot {
             version: SNAPSHOT_VERSION,
+            pinned: vec![],
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("test-ws".to_string()),
                 custom_name: Some("fallback test".to_string()),
