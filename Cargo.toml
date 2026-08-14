@@ -19,6 +19,14 @@ include = [
     "Cargo.toml",
 ]
 
+# brndr — our fork binary. Package stays `herdr` for clean upstream merges,
+# but the produced binary is `brndr` (separation from the managed `herdr`
+# binary/server; operator directive 2026-08-14). Integration tests reference
+# the bin via CARGO_BIN_EXE_brndr.
+[[bin]]
+name = "brndr"
+path = "src/main.rs"
+
 [dependencies]
 base64 = "0.22.1"
 bincode = { version = "2", features = ["serde"] }
