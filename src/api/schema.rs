@@ -129,6 +129,10 @@ pub enum Method {
     AgentWait(AgentWaitParams),
     #[serde(rename = "pane.split")]
     PaneSplit(PaneSplitParams),
+    #[serde(rename = "pane.pin")]
+    PanePin(PanePinParams),
+    #[serde(rename = "pane.unpin")]
+    PaneUnpin(PaneUnpinParams),
     #[serde(rename = "pane.swap")]
     PaneSwap(PaneSwapParams),
     #[serde(rename = "pane.move")]

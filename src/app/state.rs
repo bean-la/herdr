@@ -1394,6 +1394,10 @@ pub struct AppState {
     pub(crate) public_pane_id_aliases: std::collections::HashMap<String, PaneId>,
     pub workspaces: Vec<Workspace>,
     pub active: Option<usize>,
+    /// Session-level pinned panes (persist across workspaces + tabs).
+    pub pinned: Vec<crate::pinned::PinnedPane>,
+    /// Pane state for pinned panes, keyed by pane id.
+    pub pinned_panes: std::collections::HashMap<PaneId, crate::pane::PaneState>,
     pub(crate) previous_pane_focus: Option<PaneFocusTarget>,
     pub selected: usize,
     pub mode: Mode,
@@ -1680,7 +1684,15 @@ impl AppState {
         {
             return Some(runtime);
         }
-        let terminal_id = self.workspaces.get(ws_idx)?.terminal_id(pane_id)?;
+        let terminal_id = self
+            .workspaces
+            .get(ws_idx)?
+            .terminal_id(pane_id)
+            .or_else(|| {
+                self.pinned_panes
+                    .get(&pane_id)
+                    .map(|pane_state| &pane_state.attached_terminal_id)
+            })?;
         terminal_runtimes.get(terminal_id)
     }
 
@@ -1763,6 +1775,8 @@ impl AppState {
             public_pane_id_aliases: std::collections::HashMap::new(),
             workspaces: Vec::new(),
             active: None,
+            pinned: Vec::new(),
+            pinned_panes: std::collections::HashMap::new(),
             previous_pane_focus: None,
             selected: 0,
             mode: Mode::Navigate,

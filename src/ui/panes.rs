@@ -213,6 +213,81 @@ pub(super) fn resize_tab_panes(
             }
         }
     }
+
+    // Session-level pinned panes resize with the surface too.
+    let (_, pinned_rects) = crate::pinned::split_pinned_area(&app.pinned, area);
+    for (pin, rect) in &pinned_rects {
+        let Some(pane_state) = app.pinned_panes.get(&pin.pane_id) else {
+            continue;
+        };
+        let terminal_id = pane_state.attached_terminal_id.clone();
+        if app.direct_attach_resize_locks.contains(&terminal_id) {
+            continue;
+        }
+        let Some(rt) = terminal_runtimes.get(&terminal_id) else {
+            continue;
+        };
+        let borders = if app.pane_borders {
+            Borders::ALL
+        } else {
+            Borders::NONE
+        };
+        let pane_inner = pane_inner_rect(*rect, borders);
+        let inner_rect = stable_terminal_inner_rect(pane_inner, app.pane_scrollbars);
+        rt.resize(
+            inner_rect.height,
+            inner_rect.width,
+            cell_size.width_px,
+            cell_size.height_px,
+        );
+    }
+}
+
+/// Build PaneInfo rows for the session's pinned panes (right sidebar /
+/// bottom bar), resizing their runtimes when asked. Appended after the
+/// active tab's panes so the rect-based mouse hit-test covers them too.
+fn pinned_pane_infos(
+    app: &AppState,
+    terminal_runtimes: &TerminalRuntimeRegistry,
+    pinned_rects: &[(crate::pinned::PinnedPane, Rect)],
+    resize_panes: bool,
+    cell_size: crate::kitty_graphics::HostCellSize,
+) -> Vec<PaneInfo> {
+    let mut infos = Vec::with_capacity(pinned_rects.len());
+    for (pin, rect) in pinned_rects {
+        let Some(pane_state) = app.pinned_panes.get(&pin.pane_id) else {
+            continue;
+        };
+        let terminal_id = pane_state.attached_terminal_id.clone();
+        let Some(rt) = terminal_runtimes.get(&terminal_id) else {
+            continue;
+        };
+        let borders = if app.pane_borders {
+            Borders::ALL
+        } else {
+            Borders::NONE
+        };
+        let pane_inner = pane_inner_rect(*rect, borders);
+        let (inner_rect, scrollbar_rect) =
+            stable_scrollbar_gutter(rt, pane_inner, app.pane_scrollbars);
+        if resize_panes && !app.direct_attach_resize_locks.contains(&terminal_id) {
+            rt.resize(
+                inner_rect.height,
+                inner_rect.width,
+                cell_size.width_px,
+                cell_size.height_px,
+            );
+        }
+        infos.push(PaneInfo {
+            id: pin.pane_id,
+            rect: *rect,
+            inner_rect,
+            scrollbar_rect,
+            borders,
+            is_focused: false,
+        });
+    }
+    infos
 }
 
 /// Compute pane layout info and optionally resize pane runtimes to match.
@@ -230,6 +305,10 @@ pub(super) fn compute_pane_infos(
         return Vec::new();
     };
 
+    // Session-level pinned panes carve the surface first; the active tab's
+    // tile layout renders into the remaining area.
+    let (tab_area, pinned_rects) = crate::pinned::split_pinned_area(&app.pinned, area);
+
     let multi_pane = ws.layout.pane_count() > 1;
 
     if ws.zoomed {
@@ -239,7 +318,7 @@ pub(super) fn compute_pane_infos(
         } else {
             Borders::NONE
         };
-        let pane_inner = pane_inner_rect(area, borders);
+        let pane_inner = pane_inner_rect(tab_area, borders);
         let mut inner_rect = pane_inner;
         let mut scrollbar_rect = None;
         if let Some(rt) = app.runtime_for_pane_in_workspace(terminal_runtimes, ws_idx, focused_id) {
@@ -258,17 +337,25 @@ pub(super) fn compute_pane_infos(
                 );
             }
         }
-        return vec![PaneInfo {
+        let mut infos = vec![PaneInfo {
             id: focused_id,
-            rect: area,
+            rect: tab_area,
             inner_rect,
             scrollbar_rect,
             borders,
             is_focused: true,
         }];
+        infos.extend(pinned_pane_infos(
+            app,
+            terminal_runtimes,
+            &pinned_rects,
+            resize_panes,
+            cell_size,
+        ));
+        return infos;
     }
 
-    let mut pane_infos = apply_pane_chrome(ws.layout.panes(area), app.pane_borders, app.pane_gaps);
+    let mut pane_infos = apply_pane_chrome(ws.layout.panes(tab_area), app.pane_borders, app.pane_gaps);
 
     for info in &mut pane_infos {
         let pane_inner = pane_inner_rect(info.rect, info.borders);
@@ -296,6 +383,13 @@ pub(super) fn compute_pane_infos(
         info.scrollbar_rect = scrollbar_rect;
     }
 
+    pane_infos.extend(pinned_pane_infos(
+        app,
+        terminal_runtimes,
+        &pinned_rects,
+        resize_panes,
+        cell_size,
+    ));
     pane_infos
 }
 

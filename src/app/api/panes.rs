@@ -9,9 +9,9 @@ use crate::api::schema::{
     PaneProcessInfo, PaneProcessInfoParams, PaneProcessInfoProcess, PaneReadParams, PaneReadResult,
     PaneReleaseAgentParams, PaneRenameParams, PaneReportAgentParams, PaneReportAgentSessionParams,
     PaneReportMetadataParams, PaneResizeParams, PaneResizeReason, PaneResizeResult,
-    PaneSendInputParams, PaneSendKeysParams, PaneSendTextParams, PaneSplitParams, PaneSwapParams,
-    PaneSwapReason, PaneSwapResult, PaneTarget, PaneZoomMode, PaneZoomParams, PaneZoomReason,
-    PaneZoomResult, ResponseResult,
+    PaneSendInputParams, PaneSendKeysParams, PaneSendTextParams, PanePinParams, PaneSplitParams,
+    PaneSwapParams, PaneSwapReason, PaneSwapResult, PaneTarget, PaneUnpinParams, PaneZoomMode,
+    PaneZoomParams, PaneZoomReason, PaneZoomResult, ResponseResult,
 };
 use crate::app::actions::{PaneZoomCommand, PaneZoomNoopReason};
 use crate::app::App;
@@ -123,6 +123,91 @@ impl App {
         self.emit_layout_updated_event(ws_idx, target_tab_idx);
 
         encode_success(id, ResponseResult::PaneInfo { pane })
+    }
+
+    /// Move an existing pane into the session-level pin set (visible in
+    /// every workspace × tab — the brn dash sidebar / bottom bar).
+    pub(super) fn handle_pane_pin(&mut self, id: String, params: PanePinParams) -> String {
+        let Some((ws_idx, pane_id)) = self.parse_pane_id(&params.pane_id) else {
+            return pane_not_found(id, &params.pane_id);
+        };
+        if self.state.pinned.iter().any(|p| p.pane_id == pane_id) {
+            return encode_error(id, "pane_already_pinned", "pane is already pinned");
+        }
+        // A workspace must keep at least one tab — refuse to pin the last
+        // pane of a one-tab workspace (the brn dash flow splits first, so
+        // the original pane always remains).
+        let would_empty_workspace = self.state.workspaces.get(ws_idx).is_some_and(|ws| {
+            ws.tabs.len() <= 1
+                && ws
+                    .find_tab_index_for_pane(pane_id)
+                    .is_some_and(|tab_idx| ws.tabs[tab_idx].layout.pane_count() <= 1)
+        });
+        if would_empty_workspace {
+            return encode_error(
+                id,
+                "pane_pin_failed",
+                "cannot pin the last pane of a workspace (split another pane first)",
+            );
+        }
+        let side = match params.side {
+            crate::api::schema::common::PinnedSide::Right => crate::pinned::PinnedSide::Right,
+            crate::api::schema::common::PinnedSide::Down => crate::pinned::PinnedSide::Down,
+        };
+        let ratio = params.ratio.unwrap_or(0.25).clamp(0.1, 0.9);
+        let taken = match self
+            .state
+            .workspaces
+            .get_mut(ws_idx)
+            .and_then(|ws| ws.take_pane_for_move(pane_id))
+        {
+            Some(taken) => taken,
+            None => return encode_error(id, "pane_not_found", "pane not found"),
+        };
+        self.state
+            .pinned_panes
+            .insert(pane_id, taken.moved.pane_state);
+        self.state.pinned.push(crate::pinned::PinnedPane {
+            pane_id,
+            side,
+            ratio,
+        });
+        if let Some(ws) = self.state.workspaces.get(ws_idx) {
+            self.emit_layout_updated_event(ws_idx, ws.active_tab_index());
+        }
+        self.schedule_session_save();
+        encode_success(id, ResponseResult::Ok {})
+    }
+
+    /// Remove a pinned pane (closes its terminal).
+    pub(super) fn handle_pane_unpin(&mut self, id: String, params: PaneUnpinParams) -> String {
+        // A pinned pane is no longer in any workspace, so the workspace-scoped
+        // parse_pane_id fails — resolve via the public alias map first.
+        let pane_id = self
+            .state
+            .public_pane_id_aliases
+            .get(&params.pane_id)
+            .copied()
+            .or_else(|| self.parse_pane_id(&params.pane_id).map(|(_, id)| id));
+        let Some(pane_id) = pane_id else {
+            return pane_not_found(id, &params.pane_id);
+        };
+        let Some(pin_idx) = self.state.pinned.iter().position(|p| p.pane_id == pane_id) else {
+            return encode_error(id, "pane_not_pinned", "pane is not pinned");
+        };
+        self.state.pinned.remove(pin_idx);
+        if let Some(pane_state) = self.state.pinned_panes.remove(&pane_id) {
+            let terminal_id = pane_state.attached_terminal_id;
+            self.terminal_runtimes.remove(&terminal_id);
+            self.state.terminals.remove(&terminal_id);
+        }
+        if let Some(ws_idx) = self.state.active {
+            if let Some(ws) = self.state.workspaces.get(ws_idx) {
+                self.emit_layout_updated_event(ws_idx, ws.active_tab_index());
+            }
+        }
+        self.schedule_session_save();
+        encode_success(id, ResponseResult::Ok {})
     }
 
     pub(super) fn handle_pane_list(&mut self, id: String, params: PaneListParams) -> String {

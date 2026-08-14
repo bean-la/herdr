@@ -34,6 +34,7 @@ pub(crate) fn compute_tab_surface(
     resize_panes: bool,
     cell_size: crate::kitty_graphics::HostCellSize,
 ) -> TabSurfaceLayout {
+    let (tab_area, _) = crate::pinned::split_pinned_area(&app.pinned, area);
     let split_borders = app
         .active
         .and_then(|i| app.workspaces.get(i))
@@ -41,7 +42,7 @@ pub(crate) fn compute_tab_surface(
             if ws.zoomed {
                 Vec::new()
             } else {
-                ws.layout.splits(area)
+                ws.layout.splits(tab_area)
             }
         })
         .unwrap_or_default();
