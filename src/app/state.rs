@@ -1256,6 +1256,8 @@ impl ContextMenuState {
                 "Split right",
                 "Split down",
                 "Zoom",
+                "Pin pane",
+                "Unpin pane",
                 "Close pane",
             ],
             ContextMenuKind::Pane {
@@ -1268,6 +1270,8 @@ impl ContextMenuState {
                 "Split right",
                 "Split down",
                 "Zoom",
+                "Pin pane",
+                "Unpin pane",
                 "Close pane",
             ],
             ContextMenuKind::Pane {
@@ -1280,6 +1284,8 @@ impl ContextMenuState {
                 "Split right",
                 "Split down",
                 "Zoom",
+                "Pin pane",
+                "Unpin pane",
                 "Close pane",
             ],
             ContextMenuKind::Pane {
@@ -1291,6 +1297,8 @@ impl ContextMenuState {
                 "Split right",
                 "Split down",
                 "Zoom",
+                "Pin pane",
+                "Unpin pane",
                 "Close pane",
             ],
         }

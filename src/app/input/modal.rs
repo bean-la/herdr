@@ -941,6 +941,61 @@ pub(super) fn apply_context_menu_action(
         (
             ContextMenuKind::Pane {
                 ws_idx,
+                pane_id,
+                ..
+            },
+            Some("Pin pane"),
+        ) => {
+            // Session-level pin (same path as `brndr pane pin`): move the pane
+            // into the session pin set so it renders across every workspace/tab.
+            if !state.pinned.iter().any(|p| p.pane_id == pane_id) {
+                let would_empty = state.workspaces.get(ws_idx).is_some_and(|ws| {
+                    ws.tabs.len() <= 1
+                        && ws
+                            .find_tab_index_for_pane(pane_id)
+                            .is_some_and(|tab_idx| ws.tabs[tab_idx].layout.pane_count() <= 1)
+                });
+                if !would_empty {
+                    if let Some(taken) = state
+                        .workspaces
+                        .get_mut(ws_idx)
+                        .and_then(|ws| ws.take_pane_for_move(pane_id))
+                    {
+                        state.pinned_panes.insert(pane_id, taken.moved.pane_state);
+                        state.pinned.push(crate::pinned::PinnedPane {
+                            pane_id,
+                            side: crate::pinned::PinnedSide::Right,
+                            ratio: 0.25,
+                        });
+                        state.schedule_session_save();
+                    }
+                }
+            }
+            leave_modal(state);
+        }
+        (
+            ContextMenuKind::Pane {
+                pane_id, ..
+            },
+            Some("Unpin pane"),
+        ) => {
+            // Remove a session-pinned pane (same path as `brndr pane unpin`).
+            // Pinned panes aren't in a workspace, so resolve against the pin set
+            // directly via the pane id the menu carried.
+            if let Some(pin_idx) = state.pinned.iter().position(|p| p.pane_id == pane_id) {
+                state.pinned.remove(pin_idx);
+                if let Some(pane_state) = state.pinned_panes.remove(&pane_id) {
+                    let terminal_id = pane_state.attached_terminal_id;
+                    terminal_runtimes.remove(&terminal_id);
+                    state.terminals.remove(&terminal_id);
+                }
+                state.schedule_session_save();
+            }
+            leave_modal(state);
+        }
+        (
+            ContextMenuKind::Pane {
+                ws_idx,
                 tab_idx,
                 pane_id,
                 ..
