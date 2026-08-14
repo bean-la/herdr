@@ -4280,6 +4280,33 @@ mod tests {
     }
 
     #[test]
+    fn agent_target_resolves_effective_agent_label_without_set_agent_name() {
+        // flag-260813-herdr-agent-prompt-target-resolution: `herdr agent list`
+        // exposes the agent via effective_agent_label(), but resolve_agent_target
+        // only matched terminal.agent_name — so a live agent shown in the list
+        // (e.g. herm-metadaddy) could not be targeted by name. Match the label too.
+        let mut app = test_app();
+        let workspace = Workspace::test_new("agent-target-effective-label");
+        let pane = workspace.tabs[0].root_pane;
+        let terminal_id = workspace.terminal_id(pane).unwrap().clone();
+        app.state.workspaces = vec![workspace];
+        app.state.ensure_test_terminals();
+        let terminal = app.state.terminals.get_mut(&terminal_id).unwrap();
+        // Detected agent drives effective_agent_label()/effective_known_agent();
+        // no explicit agent_name set — mirrors a fleet lane pane.
+        terminal.set_detected_state(
+            Some(crate::detect::Agent::Pi),
+            crate::detect::AgentState::Idle,
+        );
+
+        // effective_agent_label() for a detected Pi agent (no hook authority) = "pi"
+        let resolved = app.resolve_agent_target("pi").unwrap();
+
+        assert_eq!(resolved.pane_id, pane);
+        assert_eq!(resolved.terminal_id, terminal_id.to_string());
+    }
+
+    #[test]
     fn terminal_target_reports_missing_target() {
         let mut app = test_app();
         app.state.workspaces = vec![Workspace::test_new("terminal-target-missing")];
