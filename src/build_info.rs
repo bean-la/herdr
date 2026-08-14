@@ -12,7 +12,10 @@ pub fn build_id() -> Option<&'static str> {
 
 pub fn version() -> String {
     match channel() {
-        "stable" => BASE_VERSION.to_string(),
+        "stable" => match build_id() {
+            Some(build_id) => format!("{BASE_VERSION}-{build_id}"),
+            None => BASE_VERSION.to_string(),
+        },
         channel => match build_id() {
             Some(build_id) => format!("{BASE_VERSION}-{channel}.{build_id}"),
             None => format!("{BASE_VERSION}-{channel}"),
@@ -40,5 +43,19 @@ mod tests {
     #[test]
     fn stable_version_defaults_to_cargo_version() {
         assert!(!super::version().is_empty());
+    }
+
+    #[test]
+    fn stable_version_with_build_id_appends_stamp() {
+        // Version must surface the build stamp on the stable channel too,
+        // otherwise `status restart_needed` can't tell a rebuilt-but-not-
+        // restarted server from a current one (2026-08-14).
+        let v = super::version();
+        assert!(v.starts_with(super::BASE_VERSION));
+        // When HERDR_BUILD_ID is set at compile time the stamp must appear in
+        // the reported version string (else restart_needed stays blind).
+        if let Some(build_id) = super::build_id() {
+            assert!(v.contains(build_id), "version {v:?} missing build_id {build_id:?}");
+        }
     }
 }
