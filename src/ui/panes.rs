@@ -227,12 +227,9 @@ pub(super) fn resize_tab_panes(
         let Some(rt) = terminal_runtimes.get(&terminal_id) else {
             continue;
         };
-        let borders = if app.pane_borders {
-            Borders::ALL
-        } else {
-            Borders::NONE
-        };
-        let pane_inner = pane_inner_rect(*rect, borders);
+        // Pinned panes render borderless — they are a content sidebar, not a
+        // split tile; a border just eats cells the content needs.
+        let pane_inner = pane_inner_rect(*rect, Borders::NONE);
         let inner_rect = stable_terminal_inner_rect(pane_inner, app.pane_scrollbars);
         rt.resize(
             inner_rect.height,
@@ -262,12 +259,9 @@ fn pinned_pane_infos(
         let Some(rt) = terminal_runtimes.get(&terminal_id) else {
             continue;
         };
-        let borders = if app.pane_borders {
-            Borders::ALL
-        } else {
-            Borders::NONE
-        };
-        let pane_inner = pane_inner_rect(*rect, borders);
+        // Pinned panes render borderless — they are a content sidebar, not a
+        // split tile; a border just eats cells the content needs.
+        let pane_inner = pane_inner_rect(*rect, Borders::NONE);
         let (inner_rect, scrollbar_rect) =
             stable_scrollbar_gutter(rt, pane_inner, app.pane_scrollbars);
         if resize_panes && !app.direct_attach_resize_locks.contains(&terminal_id) {
@@ -283,7 +277,7 @@ fn pinned_pane_infos(
             rect: *rect,
             inner_rect,
             scrollbar_rect,
-            borders,
+            borders: Borders::NONE,
             is_focused: false,
         });
     }
