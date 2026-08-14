@@ -808,6 +808,10 @@
             "pane_id": {
               "type": "string"
             },
+            "pinned": {
+              "default": false,
+              "type": "boolean"
+            },
             "revision": {
               "format": "uint64",
               "minimum": 0,
@@ -2679,6 +2683,29 @@
           ],
           "type": "object"
         },
+        "PanePinParams": {
+          "properties": {
+            "pane_id": {
+              "description": "Pane to move into the session-level pin set (must already exist).",
+              "type": "string"
+            },
+            "ratio": {
+              "format": "float",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "side": {
+              "$ref": "#/schemas/request/$defs/PinnedSide"
+            }
+          },
+          "required": [
+            "pane_id",
+            "side"
+          ],
+          "type": "object"
+        },
         "PaneProcessInfoParams": {
           "properties": {
             "pane_id": {
@@ -3113,6 +3140,18 @@
           ],
           "type": "object"
         },
+        "PaneUnpinParams": {
+          "properties": {
+            "pane_id": {
+              "description": "Pinned pane to remove (alias of the pinned pane).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "pane_id"
+          ],
+          "type": "object"
+        },
         "PaneWaitForOutputParams": {
           "properties": {
             "lines": {
@@ -3177,6 +3216,13 @@
         },
         "PingParams": {
           "type": "object"
+        },
+        "PinnedSide": {
+          "enum": [
+            "right",
+            "down"
+          ],
+          "type": "string"
         },
         "PluginActionInvokeParams": {
           "properties": {
@@ -5062,6 +5108,38 @@
             },
             "params": {
               "$ref": "#/schemas/request/$defs/PaneSplitParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "pane.pin",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PanePinParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "pane.unpin",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PaneUnpinParams"
             }
           },
           "required": [
@@ -7380,6 +7458,10 @@
             "pane_id": {
               "type": "string"
             },
+            "pinned": {
+              "default": false,
+              "type": "boolean"
+            },
             "revision": {
               "format": "uint64",
               "minimum": 0,
@@ -8952,6 +9034,13 @@
             {
               "properties": {
                 "panes": {
+                  "items": {
+                    "$ref": "#/schemas/success_response/$defs/PaneInfo"
+                  },
+                  "type": "array"
+                },
+                "pinned": {
+                  "default": [],
                   "items": {
                     "$ref": "#/schemas/success_response/$defs/PaneInfo"
                   },

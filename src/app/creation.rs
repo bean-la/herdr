@@ -448,6 +448,7 @@ impl App {
             workspace_id: self.public_workspace_id(ws_idx),
             tab_id: self.public_tab_id(ws_idx, tab_idx)?,
             focused,
+            pinned: false,
             cwd: ws.tabs[tab_idx]
                 .cwd_for_pane(pane_id, &self.state.terminals, &self.terminal_runtimes)
                 .map(|cwd| cwd.display().to_string()),
@@ -467,6 +468,63 @@ impl App {
             scroll,
             revision: terminal.revision,
         })
+    }
+
+    /// PaneInfo for a single session-level pinned pane (no workspace/tab).
+    pub(super) fn pinned_pane_info(
+        &self,
+        pin: &crate::pinned::PinnedPane,
+    ) -> Option<crate::api::schema::PaneInfo> {
+        let pane = self.state.pinned_panes.get(&pin.pane_id)?;
+        let terminal = self.state.terminals.get(&pane.attached_terminal_id)?;
+        // Pinned panes left their workspace — recover the public id from the
+        // alias map (public string -> internal PaneId, reverse-lookup).
+        let public_id = self
+            .state
+            .public_pane_id_aliases
+            .iter()
+            .find(|(_, &id)| id == pin.pane_id)
+            .map(|(public, _)| public.clone())?;
+        let runtime = self.terminal_runtimes.get(&pane.attached_terminal_id);
+        let scroll = runtime
+            .and_then(|rt| rt.scroll_metrics())
+            .map(|metrics| crate::api::schema::PaneScrollInfo {
+                offset_from_bottom: metrics.offset_from_bottom as u64,
+                max_offset_from_bottom: metrics.max_offset_from_bottom as u64,
+                viewport_rows: metrics.viewport_rows as u64,
+            });
+        let presentation = terminal.effective_presentation();
+        Some(crate::api::schema::PaneInfo {
+            pane_id: public_id,
+            terminal_id: terminal.id.to_string(),
+            workspace_id: String::new(), // session-level — not in a workspace
+            tab_id: String::new(),
+            focused: false,
+            cwd: runtime.and_then(|rt| rt.cwd()).map(|cwd| cwd.display().to_string()),
+            foreground_cwd: None,
+            label: terminal.manual_label.clone(),
+            agent: terminal.effective_agent_label().map(str::to_string),
+            title: presentation.title,
+            terminal_title: terminal.terminal_title.clone(),
+            terminal_title_stripped: terminal.terminal_title_stripped(),
+            display_agent: presentation.display_agent,
+            agent_status: pane_agent_status(terminal.state, pane.seen),
+            state_labels: presentation.state_labels,
+            tokens: terminal.metadata_tokens.values(),
+            agent_session: terminal_agent_session_info(terminal),
+            scroll,
+            revision: terminal.revision,
+            pinned: true,
+        })
+    }
+
+    /// All session-level pinned panes as PaneInfos (ordered by pin order).
+    pub(super) fn pinned_pane_infos(&self) -> Vec<crate::api::schema::PaneInfo> {
+        self.state
+            .pinned
+            .iter()
+            .filter_map(|pin| self.pinned_pane_info(pin))
+            .collect()
     }
 
     pub(super) fn lookup_runtime(

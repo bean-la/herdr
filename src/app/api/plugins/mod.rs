@@ -1997,7 +1997,7 @@ command = ["sh", "-c", "printf %s ${{HERDR_PANE_ID-unset}} > '{}'; sleep 1"]
                 workspace_id: Some(app.public_workspace_id(0)),
             }),
         });
-        let ResponseResult::PaneList { panes } = response_result(&pane_list) else {
+        let ResponseResult::PaneList { panes, .. } = response_result(&pane_list) else {
             panic!("expected pane list response: {pane_list}");
         };
         assert_eq!(panes.len(), 1);

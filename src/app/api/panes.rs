@@ -237,7 +237,13 @@ impl App {
 
     pub(super) fn handle_pane_list(&mut self, id: String, params: PaneListParams) -> String {
         match self.collect_panes_for_workspace(params.workspace_id.as_deref()) {
-            Ok(panes) => encode_success(id, ResponseResult::PaneList { panes }),
+            Ok(panes) => encode_success(
+                id,
+                ResponseResult::PaneList {
+                    panes,
+                    pinned: self.pinned_pane_infos(),
+                },
+            ),
             Err((code, message)) => encode_error(id, &code, message),
         }
     }
@@ -258,13 +264,28 @@ impl App {
     }
 
     pub(super) fn handle_pane_get(&mut self, id: String, target: PaneTarget) -> String {
-        let Some((ws_idx, pane_id)) = self.parse_pane_id(&target.pane_id) else {
+        // Workspace lookup first (normal panes), then pinned fallback — pinned
+        // panes are session-level and left their workspace on pin.
+        if let Some((ws_idx, pane_id)) = self.parse_pane_id(&target.pane_id) {
+            if let Some(pane) = self.pane_info(ws_idx, pane_id) {
+                return encode_success(id, ResponseResult::PaneInfo { pane });
+            }
+        }
+        let pane_id = self
+            .state
+            .public_pane_id_aliases
+            .get(&target.pane_id)
+            .copied()
+            .or_else(|| self.parse_pane_id(&target.pane_id).map(|(_, id)| id));
+        let Some(pane_id) = pane_id else {
             return pane_not_found(id, &target.pane_id);
         };
-        let Some(pane) = self.pane_info(ws_idx, pane_id) else {
+        let Some(pin) = self.state.pinned.iter().find(|p| p.pane_id == pane_id) else {
             return pane_not_found(id, &target.pane_id);
         };
-
+        let Some(pane) = self.pinned_pane_info(pin) else {
+            return pane_not_found(id, &target.pane_id);
+        };
         encode_success(id, ResponseResult::PaneInfo { pane })
     }
 
