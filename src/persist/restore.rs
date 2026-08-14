@@ -1353,6 +1353,7 @@ mod tests {
         let cwd = std::env::current_dir().unwrap();
         let snapshot = SessionSnapshot {
             version: super::super::snapshot::SNAPSHOT_VERSION,
+            pinned: vec![],
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("workspace".into()),
                 custom_name: None,
@@ -1395,7 +1396,7 @@ mod tests {
         };
         let (events, _event_rx) = mpsc::channel(4);
 
-        let (_workspaces, terminals, _runtimes) = restore(
+        let (_workspaces, terminals, _runtimes, _pinned, _pinned_panes) = restore(
             &snapshot,
             None,
             24,
@@ -1433,6 +1434,7 @@ mod tests {
         let cwd = std::env::current_dir().unwrap();
         let snapshot = SessionSnapshot {
             version: super::super::snapshot::SNAPSHOT_VERSION,
+            pinned: vec![],
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("w1".into()),
                 custom_name: None,
@@ -1488,7 +1490,7 @@ mod tests {
         };
         let (events, _event_rx) = mpsc::channel(4);
 
-        let (workspaces, _terminals, _runtimes) = restore(
+        let (workspaces, _terminals, _runtimes, _pinned, _pinned_panes) = restore(
             &snapshot,
             None,
             24,
@@ -1542,6 +1544,7 @@ mod tests {
         };
         let snapshot = SessionSnapshot {
             version: super::super::snapshot::SNAPSHOT_VERSION,
+            pinned: vec![],
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("w1".into()),
                 custom_name: None,
@@ -1595,7 +1598,7 @@ mod tests {
         };
         let (events, _event_rx) = mpsc::channel(4);
 
-        let (workspaces, terminals, _runtimes) = restore(
+        let (workspaces, terminals, _runtimes, _pinned, _pinned_panes) = restore(
             &snapshot,
             None,
             24,
@@ -1664,6 +1667,7 @@ mod tests {
         let cwd = std::env::current_dir().unwrap();
         let snapshot = SessionSnapshot {
             version: super::super::snapshot::SNAPSHOT_VERSION,
+            pinned: vec![],
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("workspace".into()),
                 custom_name: None,
@@ -1706,7 +1710,7 @@ mod tests {
         };
         let (events, _event_rx) = mpsc::channel(4);
 
-        let (_workspaces, terminals, runtimes) = restore(
+        let (_workspaces, terminals, runtimes, _pinned, _pinned_panes) = restore(
             &snapshot,
             None,
             24,
@@ -1770,7 +1774,7 @@ mod tests {
         let render_notify = Arc::new(Notify::new());
         let render_dirty = Arc::new(RenderSignal::new());
 
-        let (_workspaces, _terminals, runtimes) = restore(
+        let (_workspaces, _terminals, runtimes, _pinned, _pinned_panes) = restore(
             &snapshot,
             Some(&history),
             5,
@@ -1808,7 +1812,7 @@ mod tests {
         let render_notify = Arc::new(Notify::new());
         let render_dirty = Arc::new(RenderSignal::new());
 
-        let (_workspaces, _terminals, runtimes) = restore(
+        let (_workspaces, _terminals, runtimes, _pinned, _pinned_panes) = restore(
             &snapshot,
             None,
             5,
@@ -1874,6 +1878,7 @@ mod tests {
         };
         let snapshot = SessionSnapshot {
             version: super::super::snapshot::SNAPSHOT_VERSION,
+            pinned: vec![],
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("workspace".into()),
                 custom_name: None,
