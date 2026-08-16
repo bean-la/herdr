@@ -958,20 +958,31 @@ impl App {
             if self.render_dirty.is_pending() {
                 needs_render = true;
             }
+            let _t_titles = crate::render_prof::timer();
             let terminal_title_changed = self.sync_terminal_titles();
+            crate::render_prof::duration_since("loop.sync_terminal_titles", _t_titles);
             if terminal_title_changed && self.terminal_title_sidebar_configured() {
                 needs_render = true;
             }
 
             // Drain a bounded internal-event batch for responsiveness. API handlers
             // perform an exhaustive drain before reading pane/runtime state.
-            if self.drain_internal_events() {
+            let _t_events = crate::render_prof::timer();
+            let drained = self.drain_internal_events();
+            crate::render_prof::duration_since("loop.drain_internal_events", _t_events);
+            if drained {
                 needs_render = true;
             }
-            if self.expire_due_metadata(Instant::now()) {
+            let _t_meta = crate::render_prof::timer();
+            let expired = self.expire_due_metadata(Instant::now());
+            crate::render_prof::duration_since("loop.expire_due_metadata", _t_meta);
+            if expired {
                 needs_render = true;
             }
-            if self.drain_api_requests() {
+            let _t_api = crate::render_prof::timer();
+            let api = self.drain_api_requests();
+            crate::render_prof::duration_since("loop.drain_api_requests", _t_api);
+            if api {
                 needs_render = true;
             }
 
@@ -979,7 +990,10 @@ impl App {
             self.sync_session_save_schedule();
 
             let now = Instant::now();
-            if self.handle_scheduled_tasks(now, needs_render) {
+            let _t_sched = crate::render_prof::timer();
+            let scheduled = self.handle_scheduled_tasks(now, needs_render);
+            crate::render_prof::duration_since("loop.scheduled_tasks", _t_sched);
+            if scheduled {
                 needs_render = true;
             }
 
