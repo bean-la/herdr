@@ -27,8 +27,12 @@ WORKTREE="/tmp/brndr-deploy-${SHA:0:12}"
 MARKER="/var/lib/brn/brndr-restart-required"
 
 # zig is installed under ~/.local (exported in herm's .bashrc, which non-login
-# shells from ssh don't source); cargo under ~/.cargo/bin.
-export PATH="$HOME/.local/zig:$HOME/.cargo/bin:/usr/local/bin:$PATH"
+# shells from ssh don't source); cargo under ~/.cargo/bin. herm-b's default
+# ~/.local/zig is 0.16.0 — the vendored libghostty-vt build REQUIRES 0.15.2
+# (build.zig min version), so prefer the versioned 0.15.2 dir when present.
+ZIG_DIR="${HERDR_ZIG_DIR:-$HOME/.local/zig-0.15.2}"
+[ -d "$ZIG_DIR" ] || ZIG_DIR="$HOME/.local/zig"
+export PATH="$ZIG_DIR:$HOME/.cargo/bin:/usr/local/bin:$PATH"
 
 log() { printf '[brndr-install] %s\n' "$*"; }
 
