@@ -9,7 +9,7 @@ FORK=/home/herm/repos/github.com/bean-la/herdr
 WORKTREE="/tmp/brndr-rebuild-${SHA:0:8}"
 
 echo "== fetch =="
-git -C "$FORK" fetch bean-la settled-merge-v0.8.0
+git -C "$FORK" fetch bean-la brndr
 git -C "$FORK" worktree remove --force "$WORKTREE" 2>/dev/null || true
 git -C "$FORK" worktree add --detach "$WORKTREE" "$SHA"
 cd "$WORKTREE"

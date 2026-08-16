@@ -15,7 +15,7 @@
 #   file (/var/lib/brn/brndr-restart-required) + a best-effort mailbox note to
 #   the operator lane.
 #
-# Usage: bash brndr-install.sh <sha>   # sha must be on origin/settled-merge-v0.8.0
+# Usage: bash brndr-install.sh <sha>   # sha must be on origin/brndr
 set -euo pipefail
 
 SHA="${1:?usage: brndr-install.sh <sha>}"
@@ -33,8 +33,8 @@ export PATH="$HOME/.local/zig:$HOME/.cargo/bin:/usr/local/bin:$PATH"
 log() { printf '[brndr-install] %s\n' "$*"; }
 
 # ── 1. fetch + clean detached worktree ─────────────────────────────────
-log "fetch origin settled-merge-v0.8.0 in ${FORK}"
-git -C "$FORK" fetch bean-la settled-merge-v0.8.0
+log "fetch origin brndr in ${FORK}"
+git -C "$FORK" fetch bean-la brndr
 if [[ -d "$WORKTREE" ]]; then
   log "worktree exists at $WORKTREE — checking out $SHA (detached)"
   git -C "$WORKTREE" checkout -q --detach "$SHA" 2>/dev/null || true

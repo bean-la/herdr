@@ -1,7 +1,7 @@
 name: brndr deploy (herm-b)
 
 # Herm-owned deploy for the herdr fork's stable branch (2026-08-14, operator
-# decision "A"): builds settled-merge-v0.8.0, installs brndr/herdr to ~/.local/bin
+# decision "A"): builds brndr, installs brndr/herdr to ~/.local/bin
 # on herm-b, and NOTIFIES when a server restart is required. NEVER auto-restarts
 # — restarting the server kills live remote panes, so that stays a manual
 # operator step (see scripts/remote/brndr-install.sh).
@@ -18,7 +18,7 @@ name: brndr deploy (herm-b)
 
 on:
   push:
-    branches: [settled-merge-v0.8.0]
+    branches: [brndr]
     paths:
       - 'src/**'
       - 'Cargo.toml'
@@ -57,7 +57,7 @@ jobs:
       - name: Build + install + stale-detect + notify
         shell: bash -eo pipefail {0}
         run: |
-          OUT="$(ssh "${HERM_HOST}" "sudo -u herm -H bash -lc 'cd /home/herm/repos/github.com/bean-la/herdr && git fetch bean-la settled-merge-v0.8.0 && git show FETCH_HEAD:scripts/remote/brndr-install.sh > /tmp/brndr-install.sh && bash /tmp/brndr-install.sh ${GITHUB_SHA}'")"
+          OUT="$(ssh "${HERM_HOST}" "sudo -u herm -H bash -lc 'cd /home/herm/repos/github.com/bean-la/herdr && git fetch bean-la brndr && git show FETCH_HEAD:scripts/remote/brndr-install.sh > /tmp/brndr-install.sh && bash /tmp/brndr-install.sh ${GITHUB_SHA}'")"
           echo "$OUT"
           if grep -q 'restart_required=1' <<< "$OUT"; then
             echo "::warning::brndr installed, but a running server still maps the replaced binary. Operator must restart the brn session server to load the new build."
