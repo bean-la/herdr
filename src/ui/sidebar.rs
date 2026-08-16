@@ -129,6 +129,14 @@ fn agent_panel_entries_with_runtimes(
     terminal_runtimes: Option<&TerminalRuntimeRegistry>,
 ) -> Vec<AgentPanelEntry> {
     let mut entries = collect_agent_panel_entries_with_runtimes(app, terminal_runtimes);
+
+    // The compact agent panel follows the active workspace. Keep the explicit
+    // all-agent view available for operators, but don't make switching to a
+    // project workspace leave the previous project's agents visible.
+    if let Some(active_ws) = app.active {
+        entries.retain(|entry| entry.ws_idx == active_ws);
+    }
+
     crate::app::agent_view::apply_agent_view(app, &mut entries);
     entries
 }
