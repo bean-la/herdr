@@ -1,10 +1,16 @@
 name: brndr deploy (herm-b)
 
 # Herm-owned deploy for the herdr fork's stable branch (2026-08-14, operator
-# decision "A"): builds settled-merge-v0.8.0 on the herm-b self-hosted runner,
-# installs brndr/herdr to ~/.local/bin, and NOTIFIES when a server restart is
-# required. NEVER auto-restarts — restarting the server kills live remote
-# panes, so that stays a manual operator step (see scripts/remote/brndr-install.sh).
+# decision "A"): builds settled-merge-v0.8.0, installs brndr/herdr to ~/.local/bin
+# on herm-b, and NOTIFIES when a server restart is required. NEVER auto-restarts
+# — restarting the server kills live remote panes, so that stays a manual
+# operator step (see scripts/remote/brndr-install.sh).
+#
+# The actual build runs ON herm-b (brndr-install.sh, which needs the rust/zig
+# toolchain there), so this runs on a GitHub-hosted runner that merely
+# orchestrates: checkout + SSH to herm-b + invoke the install. (2026-08-16:
+# was self-hosted, but no runner is registered for bean-la/herdr so the job
+# stayed queued forever — switched to ubuntu-latest.)
 #
 # Mirrors bean-la/herm's dashboard-deploy.yml mechanics: ssh to HERM_HOST as
 # herm (HERM_SSH_KEY secrets), all git/build in clean /tmp worktrees, logic in
@@ -30,7 +36,7 @@ concurrency:
 jobs:
   build-install:
     name: Build + install + notify on herm-b
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     env:
       HERM_HOST: ${{ secrets.HERM_HOST }}
