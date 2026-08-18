@@ -36,7 +36,10 @@ concurrency:
 jobs:
   build-install:
     name: Build + install + notify on herm-b
-    runs-on: self-hosted
+    # The build itself runs ON herm-b via ssh (brndr-install.sh) — the runner
+    # only orchestrates, so a hosted runner is fine. self-hosted had no runner
+    # registered and jobs queued forever (2026-08-16; also fixed on main).
+    runs-on: ubuntu-latest
 
     env:
       HERM_HOST: ${{ secrets.HERM_HOST }}
