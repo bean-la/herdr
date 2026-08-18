@@ -41,42 +41,34 @@ impl App {
         self.presence_in_flight = true;
         let event_tx = self.event_tx.clone();
         std::thread::spawn(move || {
-            let agents = match fetch_presence(Duration::from_secs(5)) {
-                Ok(agents) => agents,
-                Err(_err) => {
-                    // Degrade gracefully: keep last-known rows. Send empty so
-                    // the in-flight flag clears; the existing rows are retained
-                    // by the consumer when no error is signaled. Simplest robust
-                    // contract: on failure, emit PresenceRefreshed with the last
-                    // known set unchanged is handled by the consumer — here we
-                    // send an empty vec and the handler only replaces when a
-                    // fetch actually succeeded (see handle_presence_refreshed).
-                    Vec::new()
-                }
+            let result = match fetch_presence(Duration::from_secs(5)) {
+                Ok(agents) => Ok(agents),
+                Err(err) => Err(format!("presence fetch failed: {err}")),
             };
-            let _ = event_tx.blocking_send(AppEvent::PresenceRefreshed { agents });
+            let _ = event_tx.blocking_send(AppEvent::PresenceRefreshed { result });
         });
     }
 
-    /// Consume a presence refresh result. Only replaces state when the fetch
-    /// actually produced rows; an empty result (fetch failure) leaves the last
-    /// known remote rows in place so the sidebar doesn't flicker on a herm-core
-    /// blip. Never panics, never blocks.
+    /// Consume a presence refresh result.
+    ///   Ok(agents) with rows → replace the sidebar rows.
+    ///   Ok(empty)         → genuinely nothing live → clear the rows.
+    ///   Err(outage)       → herm-core unreachable/parse error → retain last
+    ///                       known rows (no flicker, never panic).
+    /// Returns true when the visible state changed. Never blocks.
     pub(crate) fn handle_presence_refreshed(
         &mut self,
-        agents: Vec<crate::presence::RemoteAgent>,
+        result: Result<Vec<crate::presence::RemoteAgent>, String>,
     ) -> bool {
         self.presence_in_flight = false;
         self.last_presence_refresh = Instant::now();
-        // Only replace when we got real data (or an explicit empty when the
-        // feed genuinely has nothing live — which is indistinguishable here;
-        // so we replace on any non-empty, and on empty we treat as "no change"
-        // only if we already have rows, else clear). This keeps a herm-core
-        // outage from wiping the sidebar.
-        if agents.is_empty() && !self.state.remote_agents.is_empty() {
-            // Fetch failed or nothing live — retain last known.
-            return false;
-        }
+        let agents = match result {
+            Ok(agents) => agents,
+            Err(_err) => {
+                // Outage — keep last-known rows so the sidebar doesn't flicker
+                // on a herm-core blip.
+                return false;
+            }
+        };
         if agents == self.state.remote_agents {
             return false;
         }
@@ -138,7 +130,7 @@ mod tests {
         let config = crate::config::Config::default();
         let mut app = test_app(&config);
         app.state.remote_agents = vec![remote("herm-b-slyce-a")];
-        let changed = app.handle_presence_refreshed(vec![remote("herm-b-slyce-b")]);
+        let changed = app.handle_presence_refreshed(Ok(vec![remote("herm-b-slyce-b")]));
         assert!(changed);
         assert_eq!(app.state.remote_agents.len(), 1);
         assert_eq!(app.state.remote_agents[0].agent_id, "herm-b-slyce-b");
@@ -146,12 +138,25 @@ mod tests {
     }
 
     #[test]
-    fn handle_presence_refreshed_empty_keeps_last_known_on_outage() {
+    fn handle_presence_refreshed_ok_empty_clears_stale_rows() {
+        // Task 378f645a + metadaddy review: a genuine Ok(empty) fetch (nothing
+        // live) MUST clear previously-visible remote rows — otherwise dead
+        // project-user agents linger in the sidebar indefinitely.
         let config = crate::config::Config::default();
         let mut app = test_app(&config);
         app.state.remote_agents = vec![remote("herm-b-slyce-a")];
-        // Empty = fetch failure / herm-core down → keep last known.
-        let changed = app.handle_presence_refreshed(Vec::new());
+        let changed = app.handle_presence_refreshed(Ok(Vec::new()));
+        assert!(changed);
+        assert_eq!(app.state.remote_agents.len(), 0);
+    }
+
+    #[test]
+    fn handle_presence_refreshed_err_keeps_last_known_on_outage() {
+        let config = crate::config::Config::default();
+        let mut app = test_app(&config);
+        app.state.remote_agents = vec![remote("herm-b-slyce-a")];
+        // Err = fetch failure / herm-core down → keep last known (no flicker).
+        let changed = app.handle_presence_refreshed(Err("outage".to_string()));
         assert!(!changed);
         assert_eq!(app.state.remote_agents.len(), 1);
     }

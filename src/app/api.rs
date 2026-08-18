@@ -131,8 +131,8 @@ impl App {
             return;
         }
 
-        if let AppEvent::PresenceRefreshed { agents } = ev {
-            self.handle_presence_refreshed(agents);
+        if let AppEvent::PresenceRefreshed { result } = ev {
+            self.handle_presence_refreshed(result);
             return;
         }
 

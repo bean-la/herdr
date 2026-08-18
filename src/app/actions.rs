@@ -2934,8 +2934,8 @@ impl AppState {
                 let _ = cache_updates;
                 Vec::new()
             }
-            AppEvent::PresenceRefreshed { agents } => {
-                let _ = agents;
+            AppEvent::PresenceRefreshed { result } => {
+                let _ = result;
                 Vec::new()
             }
             AppEvent::WorktreeAddFinished(_) => Vec::new(),
