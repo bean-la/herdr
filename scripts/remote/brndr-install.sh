@@ -150,5 +150,15 @@ for wt in $(git -C "$FORK" worktree list --porcelain 2>/dev/null | awk '/^worktr
 done
 git -C "$FORK" worktree prune
 
+# ── 5.5 share the SAME build with every project user (deploy IaC) ──────
+# brndr --remote installs per-user clients at ~/.local/bin/herdr that drift
+# from herm's canonical fork binary and block connects on version mismatch.
+# Sync herm's freshly installed binary to all project users (root re-exec).
+if [[ -x "${HERM_REPO}/scripts/remote/sync-herdr-project-users.sh" ]]; then
+  log "syncing herdr to project users (shared version)"
+  sudo bash "${HERM_REPO}/scripts/remote/sync-herdr-project-users.sh" \
+    || log "WARN: project-user herdr sync failed"
+fi
+
 # ── 6. machine-readable result for the workflow ────────────────────────
 printf 'BRNDR_DEPLOY: sha=%s restart_required=%s\n' "$SHA" "$RESTART_REQUIRED"

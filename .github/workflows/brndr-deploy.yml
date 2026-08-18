@@ -67,3 +67,86 @@ jobs:
         shell: bash -eo pipefail {0}
         run: |
           ssh "${HERM_HOST}" "sudo -u herm -H bash -lc 'ls -l ~/.local/bin/brndr ~/.local/bin/herdr && ~/.local/bin/brndr --version && cat /var/lib/brn/brndr-restart-required 2>/dev/null || true'"
+
+  # macOS builds for the laptop, from the SAME settled commit as the herm-b
+  # linux build — so brndr --remote's version-match check passes against
+  # herm-b and the laptop brndr-bin stays in lockstep. Published to a rolling
+  # `brndr-latest` release (--latest=false keeps semantic releases as GitHub's
+  # "latest"); the laptop fetches herdr-macos-x86_64 from there. Steps mirror
+  # build-artifacts-manual.yml's build-macos job (same pinned toolchain).
+  build-macos:
+    name: Build macOS (brndr-latest release)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            name: herdr-macos-x86_64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            name: herdr-macos-aarch64
+    permissions:
+      contents: write
+    env:
+      RUST_TOOLCHAIN_VERSION: 1.96.1
+      LIBGHOSTTY_VT_OPTIMIZE: ReleaseSafe
+      LIBGHOSTTY_VT_SIMD: 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
+          targets: ${{ matrix.target }}
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: Install macOS build tools
+        run: brew install cmake ninja
+
+      - name: Remove Zig caches
+        run: rm -rf .zig-cache vendor/libghostty-vt/.zig-cache vendor/libghostty-vt/zig-out
+
+      - name: Build
+        run: HERDR_BUILD_ID="${GITHUB_SHA:0:8}" cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package artifact
+        run: |
+          cp target/${{ matrix.target }}/release/herdr ${{ matrix.name }}
+          file ${{ matrix.name }} > BUILD_INFO.txt
+          {
+            echo "commit=$GITHUB_SHA"
+            echo "target=${{ matrix.target }}"
+            echo "libghostty_vt_optimize=$LIBGHOSTTY_VT_OPTIMIZE"
+            echo "libghostty_vt_simd=$LIBGHOSTTY_VT_SIMD"
+          } >> BUILD_INFO.txt
+          python3 -c "import hashlib, pathlib; artifact = pathlib.Path('${{ matrix.name }}'); print(f'sha256={hashlib.sha256(artifact.read_bytes()).hexdigest()}  {artifact.name}')" >> BUILD_INFO.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            ${{ matrix.name }}
+            BUILD_INFO.txt
+          retention-days: 14
+
+      - name: Publish to brndr-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPO=bean-la/herdr
+          gh release view brndr-latest --repo "$REPO" >/dev/null 2>&1 \
+            || gh release create brndr-latest --repo "$REPO" --latest=false \
+                 --title "brndr rolling builds" \
+                 --notes "Rolling herdr fork builds for the settled commit — herm-b installs the linux build, laptops fetch the macos build."
+          gh release upload brndr-latest --repo "$REPO" --clobber "${{ matrix.name }}" BUILD_INFO.txt
