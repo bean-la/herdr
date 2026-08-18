@@ -131,7 +131,9 @@ jobs:
 
       - name: Package artifact
         run: |
-          cp target/aarch64-apple-darwin/release/herdr herdr-macos-aarch64
+          # Cargo bin is named brndr (the herdr fork's binary); ship it under
+          # the herdr-macos-aarch64 asset name for consistent install URLs.
+          cp target/aarch64-apple-darwin/release/brndr herdr-macos-aarch64
           file herdr-macos-aarch64 > BUILD_INFO.txt
           {
             echo "commit=$GITHUB_SHA"
