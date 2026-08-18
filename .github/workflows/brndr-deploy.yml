@@ -120,6 +120,12 @@ jobs:
         run: rm -rf .zig-cache vendor/libghostty-vt/.zig-cache vendor/libghostty-vt/zig-out
 
       - name: Build
+        # zig 0.15.2's archive has a misaligned compiler_rt.o that Apple ld64
+        # rejects — split linker routes exe links to zig (lld, tolerant) and
+        # proc-macro dylib links to Apple cc (see scripts/macos-split-linker.sh).
+        env:
+          CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER: ${{ github.workspace }}/scripts/macos-split-linker.sh
+          CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER: ${{ github.workspace }}/scripts/macos-split-linker.sh
         run: HERDR_BUILD_ID="${GITHUB_SHA:0:8}" cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Package artifact
