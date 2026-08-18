@@ -37,6 +37,12 @@ concurrency:
 jobs:
   build-install:
     name: Build + install + notify on herm-b
+    # herm-b is reachable only via tailnet (HERM_HOST is a tailnet name, not
+    # resolvable from GitHub-hosted runners), so this job cannot reach herm-b
+    # and is expected to fail — herm-b installs are manual via brndr-install.sh
+    # on herm-b. Keep it as a documented no-op rather than failing the run and
+    # cancelling the macOS publish (the useful output of this workflow).
+    continue-on-error: true
     # The build itself runs ON herm-b via ssh (brndr-install.sh) — the runner
     # only orchestrates, so a hosted runner is fine. self-hosted had no runner
     # registered and jobs queued forever (2026-08-16; also fixed on main).
