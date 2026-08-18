@@ -153,11 +153,17 @@ git -C "$FORK" worktree prune
 # ── 5.5 share the SAME build with every project user (deploy IaC) ──────
 # brndr --remote installs per-user clients at ~/.local/bin/herdr that drift
 # from herm's canonical fork binary and block connects on version mismatch.
-# Sync herm's freshly installed binary to all project users (root re-exec).
-if [[ -x "${HERM_REPO}/scripts/remote/sync-herdr-project-users.sh" ]]; then
+# Sync herm's freshly installed binary to all project users. Fetch the sync
+# script read-only via git show FETCH_HEAD (same trick as stale-check above;
+# the deployed /opt/herm checkout may predate the script).
+log "fetch sync-herdr-project-users.sh (read-only)"
+git -C "$HERM_REPO" fetch origin main 2>/dev/null || true
+git -C "$HERM_REPO" show FETCH_HEAD:scripts/remote/sync-herdr-project-users.sh > /tmp/sync-herdr-project-users.sh 2>/dev/null || true
+if [[ -s /tmp/sync-herdr-project-users.sh ]]; then
   log "syncing herdr to project users (shared version)"
-  sudo bash "${HERM_REPO}/scripts/remote/sync-herdr-project-users.sh" \
-    || log "WARN: project-user herdr sync failed"
+  sudo bash /tmp/sync-herdr-project-users.sh || log "WARN: project-user herdr sync failed"
+else
+  log "WARN: sync-herdr-project-users.sh unavailable — project-user sync skipped"
 fi
 
 # ── 6. machine-readable result for the workflow ────────────────────────
