@@ -24,6 +24,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'scripts/remote/brndr-install.sh'
+      - 'scripts/macos-split-linker.sh'
       - '.github/workflows/brndr-deploy.yml'
   workflow_dispatch:
 
