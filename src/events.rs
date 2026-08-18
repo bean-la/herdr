@@ -143,6 +143,11 @@ pub enum AppEvent {
         results: Vec<WorkspaceGitStatus>,
         cache_updates: Vec<(std::path::PathBuf, GitStatusCacheEntry)>,
     },
+    /// Background herm-core presence refresh completed (task 378f645a).
+    /// The vec is the read-only remote project-user projection.
+    PresenceRefreshed {
+        agents: Vec<crate::presence::RemoteAgent>,
+    },
     /// A plugin action or event command finished.
     PluginCommandFinished {
         log_id: String,

@@ -510,6 +510,11 @@ impl AppState {
                 break;
             }
             if row >= row_y && row < row_y.saturating_add(height) {
+                // Read-only remote rows (task 378f645a) are non-interactive:
+                // a click on them must not focus / send / kill any pane.
+                if detail.remote {
+                    return None;
+                }
                 return Some((detail.ws_idx, detail.tab_idx, detail.pane_id));
             }
             row_y = row_y
@@ -841,6 +846,56 @@ mod tests {
             app.state.agent_detail_target_at(body.y),
             Some((0, 0, first_pane))
         );
+    }
+
+    #[test]
+    fn remote_agent_row_is_visible_but_not_clickable_or_focusable() {
+        // Task 378f645a: read-only remote project-user rows render in the
+        // sidebar but must not resolve to a click target or focusable entry
+        // (no local pane → non-interactive).
+        let mut app = app_for_mouse_test();
+        let local = Workspace::test_new("local");
+        let local_pane = local.tabs[0].root_pane;
+        app.state.workspaces = vec![local];
+        app.state.ensure_test_terminals();
+        let local_terminal_id = app.state.workspaces[0].tabs[0].panes[&local_pane]
+            .attached_terminal_id
+            .clone();
+        app.state
+            .terminals
+            .get_mut(&local_terminal_id)
+            .unwrap()
+            .detected_agent = Some(Agent::Pi);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+
+        // Feed a remote project-user agent.
+        app.state.remote_agents = vec![crate::presence::RemoteAgent {
+            agent_id: "herm-b-slyce-perky-e9fb".into(),
+            project: "slyce".into(),
+            lane: "perky-e9fb".into(),
+            status: "idle".into(),
+            user: "slyce".into(),
+            cwd: None,
+            process_alive: true,
+            stream_alive: true,
+            last_seen_ts: None,
+            lifecycle: Some("active".into()),
+            idle: Some(false),
+            session_memo: None,
+        }];
+
+        let entries = crate::ui::agent_panel_entries(&app.state);
+        assert!(
+            entries.iter().any(|e| e.remote),
+            "remote row must appear in the panel"
+        );
+        let remote_idx = entries.iter().position(|e| e.remote).unwrap();
+        // The remote row has a sentinel ws_idx/tab_idx/pane_id (no local pane).
+        assert_eq!(entries[remote_idx].ws_idx, usize::MAX);
+
+        // It must not be focusable via the keyboard.
+        assert!(!app.state.focus_agent_entry(remote_idx));
     }
 
     #[test]

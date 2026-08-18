@@ -1509,6 +1509,11 @@ impl AppState {
         let Some(target) = entries.get(idx) else {
             return false;
         };
+        // Read-only remote rows (task 378f645a) have no local pane and must
+        // never be focused — visible but not controllable.
+        if target.remote {
+            return false;
+        }
         let ws_idx = target.ws_idx;
         let pane_id = target.pane_id;
 
@@ -2927,6 +2932,10 @@ impl AppState {
             } => {
                 let _ = results;
                 let _ = cache_updates;
+                Vec::new()
+            }
+            AppEvent::PresenceRefreshed { agents } => {
+                let _ = agents;
                 Vec::new()
             }
             AppEvent::WorktreeAddFinished(_) => Vec::new(),

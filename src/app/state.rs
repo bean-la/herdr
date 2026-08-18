@@ -1492,6 +1492,10 @@ pub struct AppState {
     pub agent_view_override: Option<crate::api::schema::AgentViewSetParams>,
     pub sidebar_agents: crate::config::AgentsSidebarConfig,
     pub sidebar_spaces: crate::config::SpacesSidebarConfig,
+    /// Read-only remote project-user agents visible in the parent sidebar
+    /// (task 378f645a). Populated by the lazy presence poll from herm-core.
+    /// These rows have NO local pane and are non-interactive.
+    pub remote_agents: Vec<crate::presence::RemoteAgent>,
     pub next_agent_state_change_seq: u64,
     /// Capture mouse input for Herdr's own mouse UI. When false, Herdr only
     /// captures mouse while the focused pane app requests mouse reporting.
@@ -1872,6 +1876,7 @@ impl AppState {
             agent_view_override: None,
             sidebar_agents: crate::config::AgentsSidebarConfig::default(),
             sidebar_spaces: crate::config::SpacesSidebarConfig::default(),
+            remote_agents: Vec::new(),
             next_agent_state_change_seq: 0,
             mouse_capture: true,
             copy_on_select: true,

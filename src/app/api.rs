@@ -131,6 +131,11 @@ impl App {
             return;
         }
 
+        if let AppEvent::PresenceRefreshed { agents } = ev {
+            self.handle_presence_refreshed(agents);
+            return;
+        }
+
         if let AppEvent::PluginCommandFinished {
             log_id,
             finished_unix_ms,
