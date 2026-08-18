@@ -109,10 +109,15 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
           targets: ${{ matrix.target }}
 
-      - name: Install Zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          version: 0.15.2
+      - name: Install Zig (patched brew formula)
+        # The official ziglang.org 0.15.2 tarball's lld rejects the vendored
+        # libghostty-vt archive (misaligned compiler_rt.o); the homebrew
+        # zig@0.15 formula carries the mach-o archive fix (same choice as
+        # release.yml). Keg-only — add its bin to PATH explicitly.
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install zig@0.15
+          echo "$(brew --prefix zig@0.15)/bin" >> "$GITHUB_PATH"
+          "$(brew --prefix zig@0.15)/bin/zig" version
 
       - name: Install macOS build tools
         run: brew install cmake ninja
