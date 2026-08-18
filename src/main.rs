@@ -82,6 +82,7 @@ mod platform;
 mod plugin_command;
 mod plugin_paths;
 mod popup_size;
+mod presence;
 mod product_announcements;
 mod protocol;
 mod pty;

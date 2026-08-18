@@ -353,6 +353,8 @@ impl App {
 
         self.start_git_status_refresh_if_due(now);
 
+        self.start_presence_refresh_if_due(now);
+
         if self
             .next_auto_update_check
             .is_some_and(|deadline| now >= deadline)

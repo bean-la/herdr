@@ -37,6 +37,10 @@ pub(crate) struct AgentPanelEntry {
     pub last_agent_state_change_seq: Option<u64>,
     pub state_labels: std::collections::HashMap<String, String>,
     pub tokens: std::collections::HashMap<String, String>,
+    /// True for a read-only remote project-user row (task 378f645a). Remote
+    /// rows have NO local pane (ws_idx/tab_idx/pane_id are sentinels) and are
+    /// non-interactive: no focus / send-text / kill / pane actions.
+    pub remote: bool,
 }
 
 fn sidebar_section_heights(total_h: u16, split_ratio: f32) -> (u16, u16) {
@@ -114,7 +118,9 @@ pub(crate) fn agent_panel_entries(app: &AppState) -> Vec<AgentPanelEntry> {
 }
 
 pub(crate) fn all_agent_panel_entries(app: &AppState) -> Vec<AgentPanelEntry> {
-    collect_agent_panel_entries_with_runtimes(app, None)
+    let mut entries = collect_agent_panel_entries_with_runtimes(app, None);
+    append_remote_agent_entries(app, &mut entries);
+    entries
 }
 
 pub(crate) fn agent_panel_entries_from(
@@ -138,9 +144,13 @@ fn agent_panel_entries_with_runtimes(
     }
 
     crate::app::agent_view::apply_agent_view(app, &mut entries);
+
+    // Append read-only remote project-user rows (task 378f645a). These are
+    // visible but never controllable: they carry NO local pane id, so any
+    // focus / send / kill / pane targeting naturally rejects them.
+    append_remote_agent_entries(app, &mut entries);
     entries
 }
-
 fn collect_agent_panel_entries_with_runtimes(
     app: &AppState,
     terminal_runtimes: Option<&TerminalRuntimeRegistry>,
@@ -185,10 +195,59 @@ fn collect_agent_panel_entries_with_runtimes(
                         last_agent_state_change_seq: detail.last_agent_state_change_seq,
                         state_labels: detail.state_labels,
                         tokens: detail.tokens,
+                        remote: false,
                     }
                 })
         })
         .collect()
+}
+
+/// Sentinel pane/workspace/tab indices for read-only remote rows. No real
+/// workspace will ever have these, so any focus/send/kill/pane lookup rejects
+/// them (task 378f645a — visible but not controllable).
+const REMOTE_SENTINEL_WS: usize = usize::MAX;
+const REMOTE_SENTINEL_TAB: usize = usize::MAX;
+
+/// Append read-only remote project-user agents as distinct sidebar rows.
+/// Each is marked `remote: true` and carries NO local pane, so interaction
+/// dispatch (which resolves through ws_idx/pane_id) naturally no-ops.
+pub(crate) fn append_remote_agent_entries(app: &AppState, entries: &mut Vec<AgentPanelEntry>) {
+    for agent in &app.remote_agents {
+        let status = agent.status.clone();
+        let state = match status.as_str() {
+            "working" => AgentState::Working,
+            "blocked" => AgentState::Blocked,
+            "idle" | "done" => AgentState::Idle,
+            _ => AgentState::Unknown,
+        };
+        // Read-only remote rows are always considered seen so they don't flash
+        // as unread; they're an observation surface, not an action queue.
+        entries.push(AgentPanelEntry {
+            ws_idx: REMOTE_SENTINEL_WS,
+            tab_idx: REMOTE_SENTINEL_TAB,
+            pane_id: crate::layout::PaneId::from_raw(u32::MAX),
+            primary_label: format!("{} · {}", agent.project, agent.lane),
+            primary_tab_label: Some("remote project-user".to_string()),
+            pane_label: None,
+            terminal_title: None,
+            terminal_title_stripped: None,
+            agent_label: Some(agent.lane.clone()),
+            agent_kind_label: Some("remote".to_string()),
+            agent: None,
+            state,
+            seen: true,
+            last_agent_state_change_seq: None,
+            state_labels: std::collections::HashMap::new(),
+            tokens: {
+                let mut m = std::collections::HashMap::new();
+                if let Some(memo) = &agent.session_memo {
+                    m.insert("session_memo".to_string(), memo.clone());
+                }
+                m
+            },
+            remote: true,
+        });
+    }
 }
 
 pub(super) fn agent_panel_status_key(state: AgentState, seen: bool) -> &'static str {
@@ -1481,22 +1540,43 @@ fn render_agent_detail(
         }
 
         let is_active = app.is_active_pane(detail.ws_idx, detail.tab_idx, detail.pane_id);
+        // Remote project-user rows are read-only observations: dimmed + italic
+        // + distinct so it's obvious they're not local / not controllable.
+        let remote = detail.remote;
         let row_style = if is_active {
             Style::default().bg(p.surface_dim)
+        } else if remote {
+            Style::default()
+                .fg(p.overlay0)
+                .add_modifier(Modifier::DIM | Modifier::ITALIC)
         } else {
             Style::default()
         };
         let name_style = if is_active {
             Style::default().fg(p.text).add_modifier(Modifier::BOLD)
+        } else if remote {
+            Style::default()
+                .fg(p.overlay0)
+                .add_modifier(Modifier::DIM | Modifier::ITALIC)
         } else {
             Style::default().fg(p.subtext0).add_modifier(Modifier::BOLD)
         };
         let status_style = if is_active {
             Style::default().fg(label_color)
+        } else if remote {
+            Style::default()
+                .fg(label_color)
+                .add_modifier(Modifier::DIM | Modifier::ITALIC)
         } else {
             Style::default().fg(label_color).add_modifier(Modifier::DIM)
         };
-        let agent_style = Style::default().fg(p.overlay0).add_modifier(Modifier::DIM);
+        let agent_style = if remote {
+            Style::default()
+                .fg(p.overlay0)
+                .add_modifier(Modifier::DIM | Modifier::ITALIC)
+        } else {
+            Style::default().fg(p.overlay0).add_modifier(Modifier::DIM)
+        };
         let state_icon = state_dot(detail.state, detail.seen, p);
 
         for (row_index, resolved) in rows.iter().take(height as usize).enumerate() {
@@ -1987,6 +2067,40 @@ rows = [[{ token = "git_status", fg = "#123456" }]]
             agent_entry_height_in_body(&app, &entry, agent_panel_body_rect(panel, false).height),
             agent_panel_body_rect(panel, false).height
         );
+    }
+
+    #[test]
+    fn remote_agent_rows_render_distinctly_in_panel() {
+        // Task 378f645a: read-only remote project-user rows render as distinct
+        // panel entries carrying the remote marker and no local pane.
+        let mut app = crate::app::state::AppState::test_new();
+        app.remote_agents = vec![crate::presence::RemoteAgent {
+            agent_id: "herm-b-slyce-perky-e9fb".into(),
+            project: "slyce".into(),
+            lane: "perky-e9fb".into(),
+            status: "idle".into(),
+            user: "slyce".into(),
+            cwd: None,
+            process_alive: true,
+            stream_alive: true,
+            last_seen_ts: None,
+            lifecycle: Some("active".into()),
+            idle: Some(false),
+            session_memo: None,
+        }];
+
+        let entries = crate::ui::agent_panel_entries(&app);
+        assert_eq!(entries.len(), 1);
+        let remote = &entries[0];
+        assert!(remote.remote);
+        assert_eq!(remote.primary_label, "slyce · perky-e9fb");
+        assert_eq!(
+            remote.primary_tab_label.as_deref(),
+            Some("remote project-user")
+        );
+        assert_eq!(remote.agent_label.as_deref(), Some("perky-e9fb"));
+        assert_eq!(remote.ws_idx, usize::MAX);
+        assert_eq!(remote.pane_id.raw(), u32::MAX);
     }
 
     #[test]

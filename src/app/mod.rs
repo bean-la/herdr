@@ -17,6 +17,7 @@ mod git_refresh;
 mod ids;
 mod input;
 mod popup;
+mod presence_refresh;
 mod runtime;
 mod runtime_mutations;
 mod session;
@@ -52,6 +53,14 @@ static GIT_REMOTE_STATUS_REFRESH_INTERVAL: LazyLock<Duration> = LazyLock::new(||
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(30_000),
+));
+// Lazy herm-core presence poll (task 378f645a): read-only remote project-user
+// rows in the parent sidebar. Default 15s, env-tunable via HERM_PRESENCE_POLL_MS.
+static PRESENCE_REFRESH_INTERVAL: LazyLock<Duration> = LazyLock::new(|| Duration::from_millis(
+    std::env::var("HERM_PRESENCE_POLL_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(15_000),
 ));
 const GIT_REPO_DISCOVERY_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const AUTO_UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(30 * 60);
@@ -131,6 +140,8 @@ pub struct App {
     pub(crate) git_refresh_due_after_in_flight: bool,
     pub(crate) git_identity_refresh_requested: bool,
     pub(crate) git_status_cache: HashMap<std::path::PathBuf, crate::workspace::GitStatusCacheEntry>,
+    pub(crate) last_presence_refresh: Instant,
+    pub(crate) presence_in_flight: bool,
     pub(crate) pending_api_worktree_creates: HashMap<std::path::PathBuf, u64>,
     pub(crate) pending_api_worktree_removes: HashMap<String, u64>,
     pub(crate) pending_api_worktree_remove_paths: HashMap<std::path::PathBuf, u64>,
@@ -648,6 +659,7 @@ impl App {
             agent_view_override: None,
             sidebar_agents: config.ui.sidebar.agents.clone(),
             sidebar_spaces: config.ui.sidebar.spaces.clone(),
+            remote_agents: Vec::new(),
             next_agent_state_change_seq: 0,
             mouse_capture: config.ui.mouse_capture,
             copy_on_select: config.ui.copy_on_select,
@@ -769,6 +781,8 @@ impl App {
             git_refresh_in_flight: false,
             git_refresh_due_after_in_flight: false,
             git_identity_refresh_requested: false,
+            last_presence_refresh: Instant::now() - *PRESENCE_REFRESH_INTERVAL,
+            presence_in_flight: false,
             git_status_cache: HashMap::new(),
             pending_api_worktree_creates: HashMap::new(),
             pending_api_worktree_removes: HashMap::new(),
