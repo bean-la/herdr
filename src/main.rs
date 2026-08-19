@@ -578,6 +578,13 @@ fn main() -> io::Result<()> {
         return remote::run_remote_client_bridge();
     }
 
+    // D127 scoped project-user attach (herm-run): attaches to the project's own
+    // root-pane terminal on the Herm-owned server. Never spawns a project-user
+    // server and never exposes the fleet view. See remote::run_attach_proxy.
+    if args.get(1).map(|s| s.as_str()) == Some("attach-proxy") {
+        return remote::run_attach_proxy(&args[2..]);
+    }
+
     if args.get(1).map(|s| s.as_str()) == Some("server") {
         return server::headless::run_server();
     }

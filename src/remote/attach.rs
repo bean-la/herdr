@@ -198,6 +198,84 @@ pub(crate) fn run_remote(remote: RemoteLaunch) -> io::Result<()> {
     run_client_process(&local_socket, &reattach_command, remote.keybindings)
 }
 
+/// Resolve a project's root-pane terminal_id via the Herm API socket.
+///
+/// Finds the workspace whose label matches `project`, then its first pane's
+/// `terminal_id`. Used by `brndr attach-proxy` so a project user attaches to
+/// their OWN workspace pane on the Herm-owned server (D127) — never a fleet
+/// view and never a freshly-spawned project-user server.
+fn resolve_project_root_terminal(project: &str) -> io::Result<String> {
+    use crate::api::client::ApiClient;
+    use crate::api::schema::{Method, Request};
+
+    let client = ApiClient::local();
+    // 1. workspace.list → find the workspace whose label == project.
+    let workspaces_value = client
+        .request_value(&Request {
+            id: format!("attach-proxy:{project}:workspaces"),
+            method: Method::WorkspaceList(crate::api::schema::EmptyParams::default()),
+        })
+        .map_err(|e| io::Error::other(format!("workspace.list failed: {e}")))?;
+    let workspaces = workspaces_value
+        .get("result")
+        .and_then(|r| r.get("workspaces"))
+        .and_then(|w| w.as_array())
+        .ok_or_else(|| io::Error::other("workspace.list: malformed response"))?;
+    let ws_id = workspaces
+        .iter()
+        .find(|w| w.get("label").and_then(|l| l.as_str()) == Some(project))
+        .and_then(|w| w.get("workspace_id"))
+        .and_then(|id| id.as_str())
+        .map(str::to_owned)
+        .ok_or_else(|| {
+            io::Error::other(format!("attach-proxy: no workspace labeled '{project}' on the Herm server"))
+        })?;
+
+    // 2. pane.list for that workspace → first pane's terminal_id.
+    let mut params = serde_json::Map::new();
+    params.insert("workspace_id".into(), serde_json::Value::String(ws_id.clone()));
+    let panes_value = client
+        .request_value(&Request {
+            id: format!("attach-proxy:{project}:panes"),
+            method: Method::PaneList(crate::api::schema::panes::PaneListParams {
+                workspace_id: Some(ws_id),
+            }),
+        })
+        .map_err(|e| io::Error::other(format!("pane.list failed: {e}")))?;
+    let panes = panes_value
+        .get("result")
+        .and_then(|r| r.get("panes"))
+        .and_then(|p| p.as_array())
+        .ok_or_else(|| io::Error::other("pane.list: malformed response"))?;
+    panes
+        .iter()
+        .find_map(|p| p.get("terminal_id").and_then(|t| t.as_str()).map(str::to_owned))
+        .ok_or_else(|| {
+            io::Error::other(format!(
+                "attach-proxy: no pane with a terminal in workspace '{project}'"
+            ))
+        })
+}
+
+/// `brndr attach-proxy <project> [--takeover]` — D127 scoped project-user
+/// attach.
+///
+/// Connects to the Herm-owned server's CLIENT socket (as herm) and attaches in
+/// TerminalAttach mode to the given project's OWN root-pane terminal. This
+/// gives the project user a scoped single-terminal stream — no fleet view, no
+/// raw API socket control, and crucially NO independent project-user herdr
+/// server is spawned (unlike native `herdr --remote`). Native remote-client-
+/// bridge remains reserved for the herm service account.
+pub(crate) fn run_attach_proxy(args: &[String]) -> io::Result<()> {
+    let project = args
+        .iter()
+        .find(|a| !a.starts_with("--"))
+        .cloned()
+        .ok_or_else(|| io::Error::other("usage: brndr attach-proxy <project> [--takeover]"))?;
+    let takeover = args.iter().any(|a| a == "--takeover");
+    let terminal_id = resolve_project_root_terminal(&project)?;
+    crate::client::run_terminal_attach(terminal_id, takeover)
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RemotePlatform {
     os: &'static str,
