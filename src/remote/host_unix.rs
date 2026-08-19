@@ -1,11 +1,50 @@
 //! Unix remote-host side of the SSH stdio bridge.
 
+use std::ffi::CStr;
 use std::io;
 use std::os::unix::net::UnixStream;
 use std::thread;
 use std::time::Duration;
 
+/// D126/D127: native remote-client-bridge is reserved for the herm service
+/// user (and root). A project user must never run it — it would spawn an
+/// independent project-user herdr server (the D126 isolation violation seen
+/// via `brndr --remote slyce@herm-b`). Route project users through the scoped
+/// `brn o --remote` (boot.ts → attach-proxy) path instead.
+fn native_remote_allowed_for(effective_user: &str) -> bool {
+    effective_user == "herm" || effective_user == "root"
+}
+
+/// Resolve the effective username from getpwuid(geteuid()) — NOT the
+/// spoofable $USER env var.
+fn effective_username() -> Option<String> {
+    unsafe {
+        let uid = libc::geteuid();
+        let pwd = libc::getpwuid(uid);
+        if pwd.is_null() {
+            return None;
+        }
+        let name = (*pwd).pw_name;
+        if name.is_null() {
+            return None;
+        }
+        Some(CStr::from_ptr(name).to_string_lossy().into_owned())
+    }
+}
+
 pub(crate) fn run_remote_client_bridge() -> io::Result<()> {
+    if let Some(user) = effective_username() {
+        if !native_remote_allowed_for(&user) {
+            eprintln!(
+                "herdr: native remote-client-bridge is reserved for the herm service user. \
+                 Project users must attach via `brn o --remote <user>@<host>` (boot.ts → attach-proxy). \
+                 Refusing to spawn an independent project-user herdr server (D126/D127)."
+            );
+            return Err(io::Error::other(
+                "native remote attach blocked for project user (D126); use `brn o --remote`",
+            ));
+        }
+    }
     ensure_remote_server_running()?;
 
     let socket_path = crate::server::socket_paths::client_socket_path();
@@ -66,4 +105,22 @@ fn ensure_remote_server_running() -> io::Result<()> {
 
     crate::server::autodetect::spawn_server_daemon()?;
     crate::server::autodetect::wait_for_server_socket(&socket_path, Duration::from_secs(5))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::native_remote_allowed_for;
+
+    #[test]
+    fn native_remote_blocked_for_project_users() {
+        assert!(!native_remote_allowed_for("slyce"));
+        assert!(!native_remote_allowed_for("seb"));
+        assert!(!native_remote_allowed_for("alice"));
+    }
+
+    #[test]
+    fn native_remote_allowed_for_herm_and_root() {
+        assert!(native_remote_allowed_for("herm"));
+        assert!(native_remote_allowed_for("root"));
+    }
 }
