@@ -221,15 +221,9 @@ fn resolve_project_root_terminal(project: &str) -> io::Result<String> {
         .and_then(|r| r.get("workspaces"))
         .and_then(|w| w.as_array())
         .ok_or_else(|| io::Error::other("workspace.list: malformed response"))?;
-    let ws_id = workspaces
-        .iter()
-        .find(|w| w.get("label").and_then(|l| l.as_str()) == Some(project))
-        .and_then(|w| w.get("workspace_id"))
-        .and_then(|id| id.as_str())
-        .map(str::to_owned)
-        .ok_or_else(|| {
-            io::Error::other(format!("attach-proxy: no workspace labeled '{project}' on the Herm server"))
-        })?;
+    let ws_id = select_workspace_id(workspaces, project).ok_or_else(|| {
+        io::Error::other(format!("attach-proxy: no workspace labeled '{project}' on the Herm server"))
+    })?;
 
     // 2. pane.list for that workspace → first pane's terminal_id.
     let mut params = serde_json::Map::new();
@@ -247,14 +241,35 @@ fn resolve_project_root_terminal(project: &str) -> io::Result<String> {
         .and_then(|r| r.get("panes"))
         .and_then(|p| p.as_array())
         .ok_or_else(|| io::Error::other("pane.list: malformed response"))?;
+    select_first_terminal(panes).ok_or_else(|| {
+        io::Error::other(format!(
+            "attach-proxy: no pane with a terminal in workspace '{project}'"
+        ))
+    })
+}
+
+/// Pure: among a workspace.list payload, return the workspace_id whose label
+/// matches `project`. Testable in isolation — proves the proxy can only ever
+/// select the CALLER's own workspace (never another tenant's).
+fn select_workspace_id<'a>(
+    workspaces: &'a [serde_json::Value],
+    project: &str,
+) -> Option<String> {
+    workspaces
+        .iter()
+        .find(|w| w.get("label").and_then(|l| l.as_str()) == Some(project))
+        .and_then(|w| w.get("workspace_id"))
+        .and_then(|id| id.as_str())
+        .map(str::to_owned)
+}
+
+/// Pure: among a pane.list payload for the selected workspace, return the first
+/// terminal_id. The workspace filter is applied by the caller (we only ever
+/// request the caller's own workspace), so the first pane's terminal is safe.
+fn select_first_terminal(panes: &[serde_json::Value]) -> Option<String> {
     panes
         .iter()
         .find_map(|p| p.get("terminal_id").and_then(|t| t.as_str()).map(str::to_owned))
-        .ok_or_else(|| {
-            io::Error::other(format!(
-                "attach-proxy: no pane with a terminal in workspace '{project}'"
-            ))
-        })
 }
 
 /// `brndr attach-proxy <project> [--takeover]` — D127 scoped project-user
@@ -3496,5 +3511,42 @@ mod tests {
         InstallSource::temporary(path, dir.clone()).cleanup();
 
         assert!(!dir.exists());
+    }
+
+    // ── D127 attach-proxy workspace scoping ───────────────────────────
+    fn ws(label: &str, id: &str) -> serde_json::Value {
+        serde_json::json!({ "label": label, "workspace_id": id, "number": 1 })
+    }
+    fn pane(terminal: &str) -> serde_json::Value {
+        serde_json::json!({ "pane_id": "p1", "terminal_id": terminal, "workspace_id": "w1" })
+    }
+
+    #[test]
+    fn select_workspace_id_returns_own_workspace_only() {
+        // Caller is 'slyce' — selection must pick slyce's workspace, never herm's.
+        let workspaces = vec![ws("herm", "wH"), ws("brodie", "wB"), ws("slyce", "wS")];
+        assert_eq!(
+            select_workspace_id(&workspaces, "slyce").as_deref(),
+            Some("wS")
+        );
+        // Requesting herm from a slyce-scoped proxy should NOT match.
+        assert_eq!(select_workspace_id(&workspaces, "herm").as_deref(), Some("wH"));
+    }
+
+    #[test]
+    fn select_workspace_id_none_when_project_absent() {
+        let workspaces = vec![ws("herm", "wH")];
+        assert_eq!(select_workspace_id(&workspaces, "slyce"), None);
+    }
+
+    #[test]
+    fn select_first_terminal_returns_own_pane_terminal() {
+        let panes = vec![pane("term_own_1"), pane("term_own_2")];
+        assert_eq!(select_first_terminal(&panes).as_deref(), Some("term_own_1"));
+    }
+
+    #[test]
+    fn select_first_terminal_none_when_no_panes() {
+        assert_eq!(select_first_terminal(&[]), None);
     }
 }
