@@ -1,5 +1,24 @@
 use std::path::{Path, PathBuf};
 
+fn set_sigpipe_disposition(handler: libc::sighandler_t) {
+    let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+    action.sa_sigaction = handler;
+    unsafe {
+        libc::sigemptyset(&mut action.sa_mask);
+        // Rust starts with SIGPIPE ignored. If this best-effort transition
+        // fails, stdout retains the existing Rust behavior.
+        libc::sigaction(libc::SIGPIPE, &action, std::ptr::null_mut());
+    }
+}
+
+pub(crate) fn begin_cli_output() {
+    set_sigpipe_disposition(libc::SIG_DFL);
+}
+
+pub(crate) fn end_cli_output() {
+    set_sigpipe_disposition(libc::SIG_IGN);
+}
+
 pub(crate) fn remote_ssh_config_paths() -> super::RemoteSshConfigPaths {
     super::RemoteSshConfigPaths {
         user_config: std::env::var_os("HOME")
