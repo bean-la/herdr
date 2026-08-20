@@ -180,6 +180,37 @@ mod tests {
     }
 
     #[test]
+    fn context_token_renders_from_tokens_and_elides_when_absent() {
+        // Default agent row line 2 is [Agent, $context]. With a `context`
+        // token present (extension pushes via report_metadata), it renders
+        // as a Custom token after the agent label.
+        let config = AgentsSidebarConfig::default();
+
+        let with_ctx = AgentPanelEntry {
+            tokens: [("context".into(), "52%".into())].into(),
+            ..entry()
+        };
+        let rows = agent_rows(&config, &with_ctx, "working");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[1],
+            vec![
+                ResolvedToken::unstyled(ResolvedTokenKind::Agent("pi".into())),
+                ResolvedToken::unstyled(ResolvedTokenKind::Custom("52%".into())),
+            ]
+        );
+
+        // Absent token -> the $context slot elides, line 2 stays just [Agent]
+        // (non-lane / remote rows unchanged).
+        let no_ctx = entry();
+        let rows = agent_rows(&config, &no_ctx, "working");
+        assert_eq!(
+            rows[1],
+            vec![ResolvedToken::unstyled(ResolvedTokenKind::Agent("pi".into()))]
+        );
+    }
+
+    #[test]
     fn missing_custom_tokens_elide_rows_and_separators() {
         let entry = entry();
         let config = AgentsSidebarConfig {
