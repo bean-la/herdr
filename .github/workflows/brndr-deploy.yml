@@ -50,16 +50,10 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install SSH key
-        run: |
-          install -m 600 -D /dev/null ~/.ssh/id_ed25519
-          echo "${HERM_SSH_KEY}" > ~/.ssh/id_ed25519
-          echo "${HERM_SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts
-
       - name: Build + install + stale-detect + notify
         shell: bash -eo pipefail {0}
         run: |
-          OUT="$(ssh "${HERM_HOST}" "sudo -u herm -H bash -lc 'cd /home/herm/repos/github.com/bean-la/herdr && git fetch bean-la brndr && git show FETCH_HEAD:scripts/remote/brndr-install.sh > /tmp/brndr-install.sh && bash /tmp/brndr-install.sh ${GITHUB_SHA}'")"
+          OUT="$(bash scripts/remote/brndr-install.sh "${GITHUB_SHA}")"
           echo "$OUT"
           if grep -q 'restart_required=1' <<< "$OUT"; then
             echo "::warning::brndr installed, but a running server still maps the replaced binary. Operator must restart the brn session server to load the new build."
@@ -68,7 +62,9 @@ jobs:
       - name: Verify install
         shell: bash -eo pipefail {0}
         run: |
-          ssh "${HERM_HOST}" "sudo -u herm -H bash -lc 'ls -l ~/.local/bin/brndr ~/.local/bin/herdr && ~/.local/bin/brndr --version && cat /var/lib/brn/brndr-restart-required 2>/dev/null || true'"
+          ls -l ~/.local/bin/brndr ~/.local/bin/herdr
+          ~/.local/bin/brndr --version
+          cat /var/lib/brn/brndr-restart-required 2>/dev/null || true
 
   # macOS build for the laptop, from the SAME settled commit as the herm-b
   # linux build — so brndr --remote's version-match check passes against
