@@ -7,10 +7,9 @@ name: brndr deploy (herm-b)
 # operator step (see scripts/remote/brndr-install.sh).
 #
 # The actual build runs ON herm-b (brndr-install.sh, which needs the rust/zig
-# toolchain there), so this runs on a GitHub-hosted runner that merely
-# orchestrates: checkout + SSH to herm-b + invoke the install. (2026-08-16:
-# was self-hosted, but no runner is registered for bean-la/herdr so the job
-# stayed queued forever — switched to ubuntu-latest.)
+# toolchain there). This job therefore runs on the registered herm-b
+# self-hosted runner and invokes the install locally; GitHub-hosted runners
+# cannot resolve or reach herm-b over its private tailnet.
 #
 # Mirrors bean-la/herm's dashboard-deploy.yml mechanics: ssh to HERM_HOST as
 # herm (HERM_SSH_KEY secrets), all git/build in clean /tmp worktrees, logic in
@@ -37,16 +36,9 @@ concurrency:
 jobs:
   build-install:
     name: Build + install + notify on herm-b
-    # herm-b is reachable only via tailnet (HERM_HOST is a tailnet name, not
-    # resolvable from GitHub-hosted runners), so this job cannot reach herm-b
-    # and is expected to fail — herm-b installs are manual via brndr-install.sh
-    # on herm-b. Keep it as a documented no-op rather than failing the run and
-    # cancelling the macOS publish (the useful output of this workflow).
-    continue-on-error: true
-    # The build itself runs ON herm-b via ssh (brndr-install.sh) — the runner
-    # only orchestrates, so a hosted runner is fine. self-hosted had no runner
-    # registered and jobs queued forever (2026-08-16; also fixed on main).
-    runs-on: ubuntu-latest
+    # Must run on herm-b: the host is private tailnet-only and the build
+    # requires the toolchain installed there.
+    runs-on: self-hosted
 
     env:
       HERM_HOST: ${{ secrets.HERM_HOST }}
