@@ -94,6 +94,7 @@ impl App {
 
     pub(crate) fn git_refresh_deadline(&self) -> Option<Instant> {
         (!self.git_refresh_in_flight
+            && !self.state.sidebar_collapsed
             && !self.state.workspaces.is_empty()
             && (self.git_identity_refresh_requested || !self.git_refresh_demand().is_empty()))
         .then_some(self.last_git_remote_status_refresh + *GIT_REMOTE_STATUS_REFRESH_INTERVAL)
