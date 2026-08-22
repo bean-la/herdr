@@ -65,6 +65,16 @@ impl App {
         self.refresh_effective_app_theme()
     }
 
+    pub(crate) fn force_host_terminal_appearance(
+        &mut self,
+        appearance: crate::terminal_theme::HostAppearance,
+    ) {
+        self.state.host_terminal_appearance = Some(appearance);
+        self.state.host_terminal_appearance_explicit = true;
+        self.apply_host_terminal_appearance_to_panes();
+        self.refresh_effective_app_theme();
+    }
+
     pub(crate) fn set_host_terminal_appearance_state(
         &mut self,
         appearance: Option<crate::terminal_theme::HostAppearance>,

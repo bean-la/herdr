@@ -2925,6 +2925,23 @@ mod tests {
     }
 
     #[test]
+    fn forced_host_terminal_appearance_reapplies_same_value() {
+        let config = Config::default();
+        let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(&config, true, None, api_rx, crate::api::EventHub::default());
+
+        app.state.host_terminal_appearance = Some(crate::terminal_theme::HostAppearance::Light);
+        app.state.host_terminal_appearance_explicit = false;
+        app.force_host_terminal_appearance(crate::terminal_theme::HostAppearance::Dark);
+
+        assert_eq!(
+            app.state.host_terminal_appearance,
+            Some(crate::terminal_theme::HostAppearance::Dark)
+        );
+        assert!(app.state.host_terminal_appearance_explicit);
+    }
+
+    #[test]
     fn inferred_background_appearance_does_not_override_explicit_report() {
         let mut config = Config::default();
         config.theme.name = Some("catppuccin".to_string());

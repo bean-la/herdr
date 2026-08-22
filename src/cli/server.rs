@@ -1,4 +1,6 @@
-use crate::api::schema::{EmptyParams, Method, Request, ServerLiveHandoffParams};
+use crate::api::schema::{
+    EmptyParams, Method, Request, ServerLiveHandoffParams, ServerSetAppearanceParams,
+};
 
 pub(super) fn run_server_command(args: &[String]) -> std::io::Result<Option<i32>> {
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
@@ -10,6 +12,7 @@ pub(super) fn run_server_command(args: &[String]) -> std::io::Result<Option<i32>
         "live-handoff" => server_live_handoff(&args[1..]).map(Some),
         "--handoff-import" => Ok(None),
         "reload-config" => server_reload_config(&args[1..]).map(Some),
+        "set-appearance" => server_set_appearance(&args[1..]).map(Some),
         "agent-manifests" => server_agent_manifests(&args[1..]).map(Some),
         "update-agent-manifests" => server_update_agent_manifests(&args[1..]).map(Some),
         "reload-agent-manifests" => server_reload_agent_manifests(&args[1..]).map(Some),
@@ -48,6 +51,24 @@ fn server_reload_config(args: &[String]) -> std::io::Result<i32> {
     super::print_response(&super::send_request(&Request {
         id: "cli:server:reload-config".into(),
         method: Method::ServerReloadConfig(EmptyParams::default()),
+    })?)
+}
+
+fn server_set_appearance(args: &[String]) -> std::io::Result<i32> {
+    let [appearance] = args else {
+        eprintln!("usage: herdr server set-appearance <dark|light|reapply>");
+        return Ok(2);
+    };
+    if !matches!(appearance.as_str(), "dark" | "light" | "reapply") {
+        eprintln!("usage: herdr server set-appearance <dark|light|reapply>");
+        return Ok(2);
+    }
+
+    super::print_response(&super::send_request(&Request {
+        id: "cli:server:set-appearance".into(),
+        method: Method::ServerSetAppearance(ServerSetAppearanceParams {
+            appearance: appearance.clone(),
+        }),
     })?)
 }
 
@@ -258,6 +279,7 @@ fn print_server_help() {
     eprintln!("  herdr server stop           stop the running server via the API socket");
     eprintln!("  herdr server live-handoff   hand off live panes to a new local server");
     eprintln!("  herdr server reload-config  reload config.toml in the running server");
+    eprintln!("  herdr server set-appearance <dark|light|reapply>  force pane appearance");
     eprintln!("  herdr server agent-manifests [--json]  show agent detection manifest status");
     eprintln!("  herdr server update-agent-manifests [--json]  fetch and reload agent detection manifests");
     eprintln!("  herdr server reload-agent-manifests  reload agent detection manifests in the running server");

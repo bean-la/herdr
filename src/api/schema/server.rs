@@ -19,3 +19,9 @@ pub struct ServerCapabilities {
     #[serde(default)]
     pub detached_server_daemon: bool,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ServerSetAppearanceParams {
+    /// `dark`, `light`, or `reapply` (reapply the current appearance).
+    pub appearance: String,
+}

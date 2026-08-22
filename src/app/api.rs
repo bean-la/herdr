@@ -969,6 +969,34 @@ impl App {
                     },
                 }
             }
+            Method::ServerSetAppearance(params) => {
+                let appearance = match params.appearance.to_ascii_lowercase().as_str() {
+                    "dark" => crate::terminal_theme::HostAppearance::Dark,
+                    "light" => crate::terminal_theme::HostAppearance::Light,
+                    "reapply" => self
+                        .state
+                        .host_terminal_appearance
+                        .unwrap_or(crate::terminal_theme::HostAppearance::Dark),
+                    value => {
+                        let response = ErrorResponse {
+                            id: request.id,
+                            error: ErrorBody {
+                                code: "invalid_appearance".into(),
+                                message: format!(
+                                    "unknown appearance {value:?}; expected dark, light, or reapply"
+                                ),
+                            },
+                        };
+                        return serde_json::to_string(&response)
+                            .unwrap_or_else(|_| "{}".to_string());
+                    }
+                };
+                self.force_host_terminal_appearance(appearance);
+                SuccessResponse {
+                    id: request.id,
+                    result: ResponseResult::Ok {},
+                }
+            }
             Method::ServerAgentManifests(_) => {
                 self.state.refresh_agent_manifest_summaries();
                 let update_status = crate::detect::manifest_update::load_status();
