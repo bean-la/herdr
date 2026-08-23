@@ -61,6 +61,8 @@ jobs:
             echo 'No Herm Zig toolchain found' >&2
             exit 1
           fi
+          cargo --version
+          zig version
 
       - name: Build Linux artifact
         shell: bash -eo pipefail {0}
