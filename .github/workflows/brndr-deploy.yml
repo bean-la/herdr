@@ -1,4 +1,4 @@
-name: brndr deploy (herm-b)
+name: brndr build and publish
 
 # Herm-owned deploy for the herdr fork's stable branch (2026-08-14, operator
 # decision "A"): builds brndr, installs brndr/herdr to ~/.local/bin
