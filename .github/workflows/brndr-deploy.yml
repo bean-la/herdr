@@ -50,6 +50,9 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Configure Rust toolchain path
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
       - name: Build Linux artifact
         shell: bash -eo pipefail {0}
         run: |
