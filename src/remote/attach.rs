@@ -1618,12 +1618,19 @@ fn remote_release_asset(asset_key: &str) -> io::Result<RemoteReleaseAsset> {
     let manifest_bytes = fetch_remote_manifest(STABLE_UPDATE_MANIFEST_URL)?;
     let manifest: RemoteUpdateManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|err| io::Error::other(format!("failed to parse update manifest JSON: {err}")))?;
-    let release = manifest.release_for_version(&current_version).ok_or_else(|| {
-        io::Error::other(format!(
-            "release manifest does not include herdr {current_version}; build herdr for {} or install it there manually",
-            asset_key
-        ))
-    })?;
+    let Some(release) = manifest.release_for_version(&current_version) else {
+        // brndr is a Herm-managed rolling fork build. Its Linux artifact is
+        // published separately from stable herdr.dev releases.
+        if current_version.starts_with("0.8.2-") && asset_key == "linux-x86_64" {
+            return Ok(RemoteReleaseAsset {
+                url: "https://github.com/bean-la/herdr/releases/download/brndr-latest/herdr-linux-x86_64".into(),
+                sha256: None,
+            });
+        }
+        return Err(io::Error::other(format!(
+            "release manifest does not include herdr {current_version}; build herdr for {asset_key} or install it there manually"
+        )));
+    };
     if let Some(protocol) = release.protocol {
         if protocol != CURRENT_PROTOCOL {
             return Err(io::Error::other(format!(

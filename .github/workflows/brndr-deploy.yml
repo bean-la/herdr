@@ -59,6 +59,19 @@ jobs:
             echo "::warning::brndr installed, but a running server still maps the replaced binary. Operator must restart the brn session server to load the new build."
           fi
 
+      - name: Publish Linux rolling asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp ~/.local/bin/brndr herdr-linux-x86_64
+          sha256sum herdr-linux-x86_64 > BUILD_INFO-linux.txt
+          REPO=bean-la/herdr
+          gh release view brndr-latest --repo "$REPO" >/dev/null 2>&1 \
+            || gh release create brndr-latest --repo "$REPO" --latest=false \
+                 --title "brndr rolling builds" \
+                 --notes "Rolling brndr builds for herm-b and laptops."
+          gh release upload brndr-latest --repo "$REPO" --clobber herdr-linux-x86_64 BUILD_INFO-linux.txt
+
       - name: Verify install
         shell: bash -eo pipefail {0}
         run: |
