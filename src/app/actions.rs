@@ -3054,7 +3054,13 @@ impl AppState {
     pub(crate) fn reconcile_managed_agents_at(&mut self, now: Instant) -> Vec<(usize, PaneId)> {
         let mut changed_terminals = std::collections::HashSet::new();
         for (terminal_id, terminal) in &mut self.terminals {
-            if terminal.reconcile_managed_agent_at(now, false) {
+            // Reconcile both the managed lifecycle and labels restored from a
+            // dead/undetected session. The latter must run on the periodic
+            // path too; agent.list is not guaranteed to be called before the
+            // stale pane is published again.
+            if terminal.reconcile_managed_agent_at(now, false)
+                || terminal.clear_stale_agent_name_if_undetected()
+            {
                 changed_terminals.insert(terminal_id.clone());
             }
         }
