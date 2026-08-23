@@ -50,8 +50,17 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Configure Rust toolchain path
-        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Configure Rust and Zig toolchain paths
+        run: |
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          if [ -d "$HOME/.local/zig-0.15.2" ]; then
+            echo "$HOME/.local/zig-0.15.2" >> "$GITHUB_PATH"
+          elif [ -d "$HOME/.local/zig" ]; then
+            echo "$HOME/.local/zig" >> "$GITHUB_PATH"
+          else
+            echo 'No Herm Zig toolchain found' >&2
+            exit 1
+          fi
 
       - name: Build Linux artifact
         shell: bash -eo pipefail {0}
