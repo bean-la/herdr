@@ -53,7 +53,10 @@ impl App {
             .state
             .terminals
             .get_mut(&terminal_id)
-            .is_some_and(|terminal| terminal.reconcile_managed_agent_at(Instant::now(), false));
+            .is_some_and(|terminal| {
+                terminal.reconcile_managed_agent_at(Instant::now(), false)
+                    || terminal.clear_stale_agent_name_if_undetected()
+            });
         if changed {
             self.state.mark_session_dirty();
             self.schedule_session_save();

@@ -2067,6 +2067,17 @@ impl TerminalState {
         self.clear_agent_name();
     }
 
+    /// Clear a persisted agent label once process reconciliation proves that
+    /// no agent is currently detected. This covers labels restored from a
+    /// previous session whose managed-agent lifecycle record is gone.
+    pub fn clear_stale_agent_name_if_undetected(&mut self) -> bool {
+        if self.agent_name.is_some() && self.effective_known_agent().is_none() {
+            self.clear_agent_name();
+            return true;
+        }
+        false
+    }
+
     pub fn is_agent_terminal(&self) -> bool {
         self.agent_name.is_some() || self.effective_agent_label().is_some()
     }
