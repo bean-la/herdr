@@ -10,6 +10,12 @@ use std::time::{Duration, Instant};
 use crate::detect::{Agent, AgentState};
 use crate::terminal::TerminalId;
 
+/// A hook authority must be re-reported (heartbeated) within this window or it
+/// is considered stale and drops out of the live agent view. The herm-core
+/// extension heartbeats ~every 30s; 90s (3x) is a safe expiry bound while
+/// tolerating a missed beat.
+const HOOK_AUTHORITY_STALE_AFTER: Duration = Duration::from_secs(90);
+
 #[path = "metadata.rs"]
 mod metadata;
 pub use metadata::{AgentMetadata, AgentMetadataReport, EffectivePresentation};
@@ -1789,10 +1795,24 @@ impl TerminalState {
     }
 
     fn hook_authority_is_effective(&self, authority: &HookAuthority) -> bool {
-        !crate::detect::full_lifecycle_hook_authority(&authority.source, &authority.agent_label)
-            || crate::detect::parse_agent_label(&authority.agent_label).is_none_or(|agent| {
-                self.detected_agent == Some(agent) && self.recent_agent_process_exit.is_none()
-            })
+        // A hook authority must stay FRESH: expire a stale authority when its
+        // source stops reporting (the agent process died without a clean
+        // release, or the pane was quit abruptly). Without this, a dead agent
+        // (e.g. herm-core extension that reported then quit) lingers in
+        // agent.list / the sidebar forever because for non-full-lifecycle
+        // sources the old predicate returned true unconditionally. The live
+        // extension heartbeats ~every 30s, so 3x is a safe expiry window.
+        let fresh = authority.reported_at.elapsed() < HOOK_AUTHORITY_STALE_AFTER;
+        fresh
+            && (!crate::detect::full_lifecycle_hook_authority(
+                &authority.source,
+                &authority.agent_label,
+            ) || crate::detect::parse_agent_label(&authority.agent_label).is_none_or(
+                |agent| {
+                    self.detected_agent == Some(agent)
+                        && self.recent_agent_process_exit.is_none()
+                },
+            ))
     }
 
     pub fn effective_agent_label(&self) -> Option<&str> {
@@ -3954,6 +3974,37 @@ mod tests {
         assert_eq!(terminal.detected_agent, None);
         assert_eq!(terminal.effective_agent_label(), Some("custom-agent"));
         assert_eq!(terminal.state, AgentState::Working);
+    }
+
+    #[test]
+    fn non_full_lifecycle_hook_authority_expires_when_stale() {
+        // herm-core (and other non-full-lifecycle sources) report_agent on
+        // session start + heartbeat ~30s. When the process quits/aborts the
+        // reports stop; the authority must expire so the dead agent drops out
+        // of agent.list / the sidebar (flag-260813 recurrence).
+        let mut terminal = test_terminal();
+        terminal.set_hook_authority_at(
+            "herm-core".into(),
+            "herm-taskdaddy".into(),
+            AgentState::Idle,
+            None,
+            None,
+            None,
+            Instant::now(),
+        );
+        assert_eq!(terminal.effective_agent_label(), Some("herm-taskdaddy"));
+        assert!(terminal.is_agent_terminal());
+
+        // Simulate the agent going silent (no heartbeat for > TTL). Advance
+        // reported_at into the past so the wall-clock elapsed() crosses the
+        // staleness bound.
+        terminal
+            .hook_authority
+            .as_mut()
+            .unwrap()
+            .reported_at = Instant::now() - HOOK_AUTHORITY_STALE_AFTER - Duration::from_secs(1);
+        assert_eq!(terminal.effective_agent_label(), None);
+        assert!(!terminal.is_agent_terminal());
     }
 
     #[test]
