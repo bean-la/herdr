@@ -54,13 +54,15 @@ jobs:
         run: |
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           if [ -d "$HOME/.local/zig-0.15.2" ]; then
-            echo "$HOME/.local/zig-0.15.2" >> "$GITHUB_PATH"
+            ZIG_DIR="$HOME/.local/zig-0.15.2"
           elif [ -d "$HOME/.local/zig" ]; then
-            echo "$HOME/.local/zig" >> "$GITHUB_PATH"
+            ZIG_DIR="$HOME/.local/zig"
           else
             echo 'No Herm Zig toolchain found' >&2
             exit 1
           fi
+          echo "$ZIG_DIR" >> "$GITHUB_PATH"
+          export PATH="$ZIG_DIR:$HOME/.cargo/bin:$PATH"
           cargo --version
           zig version
 
