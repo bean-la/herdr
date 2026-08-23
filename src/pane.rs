@@ -445,6 +445,7 @@ fn should_skip_process_probe_for_lifecycle_authority(
         && !input.pending_foreground_shell_clear
         && input.suppressed_agent.is_none()
         && input.has_process_probe
+        && input.elapsed_since_process_check < PROCESS_RECHECK_IDENTIFIED
         && !foreground_group_changed(input.foreground_pgid, input.last_foreground_pgid)
 }
 
@@ -4020,20 +4021,24 @@ mod tests {
     }
 
     #[test]
-    fn lifecycle_authority_skips_stable_routine_process_probe() {
+    fn lifecycle_authority_keeps_periodic_process_probe_for_exit_detection() {
+        let input = ProcessProbeInput {
+            current_agent: Some(Agent::Pi),
+            elapsed_since_process_check: PROCESS_RECHECK_IDENTIFIED,
+            ..process_probe_input()
+        };
+        assert!(!should_skip_process_probe_for_lifecycle_authority(true, input));
+        assert!(!should_skip_process_probe_for_lifecycle_authority(false, input));
+    }
+
+    #[test]
+    fn lifecycle_authority_skips_stable_process_probe_before_periodic_deadline() {
         assert!(should_skip_process_probe_for_lifecycle_authority(
             true,
             ProcessProbeInput {
                 current_agent: Some(Agent::Pi),
-                elapsed_since_process_check: PROCESS_RECHECK_IDENTIFIED,
-                ..process_probe_input()
-            }
-        ));
-        assert!(!should_skip_process_probe_for_lifecycle_authority(
-            false,
-            ProcessProbeInput {
-                current_agent: Some(Agent::Pi),
-                elapsed_since_process_check: PROCESS_RECHECK_IDENTIFIED,
+                elapsed_since_process_check:
+                    PROCESS_RECHECK_IDENTIFIED - std::time::Duration::from_millis(1),
                 ..process_probe_input()
             }
         ));
