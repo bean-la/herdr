@@ -1863,7 +1863,8 @@ impl AppState {
             let previous_agent_name = terminal.agent_name.clone();
             let managed_launch_pending = terminal.managed_agent_launch_pending();
             let mutation = update(terminal)?;
-            let managed_changed = terminal.reconcile_managed_agent_at(now, false);
+            let managed_changed = terminal.reconcile_managed_agent_at(now, false)
+                || terminal.clear_stale_agent_name_if_undetected();
             let suppress_acquisition_completion = terminal.finish_agent_process_acquisition();
             let agent_name_changed = terminal.agent_name != previous_agent_name;
             let unchanged_change = (mutation.agent_released || agent_name_changed)
