@@ -14,6 +14,18 @@ const AGENT_PROMPT_SUBMIT_DELAY: Duration = Duration::from_millis(300);
 
 impl App {
     pub(super) fn handle_agent_list(&mut self, id: String) -> String {
+        // agent.list is also a liveness reconciliation boundary. A pane can
+        // remain an agent terminal after its foreground pi exits; reconcile
+        // each reported target before taking the snapshot so stale labels do
+        // not persist merely because callers use list instead of get.
+        let targets: Vec<String> = self
+            .collect_agent_infos()
+            .into_iter()
+            .filter_map(|agent| agent.agent.or(agent.name))
+            .collect();
+        for target in targets {
+            self.reconcile_managed_agent_target(&target);
+        }
         encode_success(
             id,
             ResponseResult::AgentList {
