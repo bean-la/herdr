@@ -34,8 +34,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-install:
-    name: Build + install + notify on herm-b
+  build-publish-linux:
+    name: Build + publish Linux artifact
     # Must run on herm-b: the host is private tailnet-only and the build
     # requires the toolchain installed there.
     runs-on: self-hosted
@@ -50,34 +50,24 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Build + install + stale-detect + notify
+      - name: Build Linux artifact
         shell: bash -eo pipefail {0}
         run: |
-          OUT="$(bash scripts/remote/brndr-install.sh "${GITHUB_SHA}")"
-          echo "$OUT"
-          if grep -q 'restart_required=1' <<< "$OUT"; then
-            echo "::warning::brndr installed, but a running server still maps the replaced binary. Operator must restart the brn session server to load the new build."
-          fi
+          HERDR_BUILD_ID="${GITHUB_SHA:0:8}" cargo build --release --locked
+          cp target/release/brndr herdr-linux-x86_64
+          chmod 0755 herdr-linux-x86_64
+          sha256sum herdr-linux-x86_64 > BUILD_INFO-linux.txt
 
-      - name: Publish Linux rolling asset
+      - name: Publish immutable Linux artifact
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp ~/.local/bin/brndr herdr-linux-x86_64
-          sha256sum herdr-linux-x86_64 > BUILD_INFO-linux.txt
-          REPO=bean-la/herdr
-          gh release view brndr-latest --repo "$REPO" >/dev/null 2>&1 \
-            || gh release create brndr-latest --repo "$REPO" --latest=false \
-                 --title "brndr rolling builds" \
-                 --notes "Rolling brndr builds for herm-b and laptops."
-          gh release upload brndr-latest --repo "$REPO" --clobber herdr-linux-x86_64 BUILD_INFO-linux.txt
-
-      - name: Verify install
-        shell: bash -eo pipefail {0}
-        run: |
-          ls -l ~/.local/bin/brndr ~/.local/bin/herdr
-          ~/.local/bin/brndr --version
-          cat /var/lib/brn/brndr-restart-required 2>/dev/null || true
+          tag="brndr-${GITHUB_SHA}"
+          gh release create "$tag" --repo bean-la/herdr --target "$GITHUB_SHA" \
+            --title "$tag" --notes "Immutable brndr build for ${GITHUB_SHA}." \
+            herdr-linux-x86_64 BUILD_INFO-linux.txt
+          gh release upload brndr-latest --repo bean-la/herdr --clobber \
+            herdr-linux-x86_64 BUILD_INFO-linux.txt || true
 
   # macOS build for the laptop, from the SAME settled commit as the herm-b
   # linux build — so brndr --remote's version-match check passes against
