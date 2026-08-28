@@ -159,7 +159,15 @@ fn validate_remote_target(target: &str) -> Result<&str, String> {
     Ok(target)
 }
 
+/// Human-readable mode label shown before launching an SSH-backed session.
+/// This is intentionally explicit: `--remote` creates an isolated,
+/// project-owned session and never attaches to or controls the Herm parent.
+pub(crate) fn remote_mode_label(target: &str) -> String {
+    format!("isolated remote project-owned session ({target})")
+}
+
 pub(crate) fn run_remote(remote: RemoteLaunch) -> io::Result<()> {
+    eprintln!("{}", remote_mode_label(&remote.target));
     let session_name = crate::session::active_name()
         .unwrap_or_else(|| crate::session::DEFAULT_SESSION_NAME.to_string());
     let local_socket = local_forward_socket_path(&remote.target, &session_name);
@@ -222,12 +230,17 @@ fn resolve_project_root_terminal(project: &str) -> io::Result<String> {
         .and_then(|w| w.as_array())
         .ok_or_else(|| io::Error::other("workspace.list: malformed response"))?;
     let ws_id = select_workspace_id(workspaces, project).ok_or_else(|| {
-        io::Error::other(format!("attach-proxy: no workspace labeled '{project}' on the Herm server"))
+        io::Error::other(format!(
+            "attach-proxy: no workspace labeled '{project}' on the Herm server"
+        ))
     })?;
 
     // 2. pane.list for that workspace → first pane's terminal_id.
     let mut params = serde_json::Map::new();
-    params.insert("workspace_id".into(), serde_json::Value::String(ws_id.clone()));
+    params.insert(
+        "workspace_id".into(),
+        serde_json::Value::String(ws_id.clone()),
+    );
     let panes_value = client
         .request_value(&Request {
             id: format!("attach-proxy:{project}:panes"),
@@ -251,10 +264,7 @@ fn resolve_project_root_terminal(project: &str) -> io::Result<String> {
 /// Pure: among a workspace.list payload, return the workspace_id whose label
 /// matches `project`. Testable in isolation — proves the proxy can only ever
 /// select the CALLER's own workspace (never another tenant's).
-fn select_workspace_id<'a>(
-    workspaces: &'a [serde_json::Value],
-    project: &str,
-) -> Option<String> {
+fn select_workspace_id<'a>(workspaces: &'a [serde_json::Value], project: &str) -> Option<String> {
     workspaces
         .iter()
         .find(|w| w.get("label").and_then(|l| l.as_str()) == Some(project))
@@ -267,9 +277,11 @@ fn select_workspace_id<'a>(
 /// terminal_id. The workspace filter is applied by the caller (we only ever
 /// request the caller's own workspace), so the first pane's terminal is safe.
 fn select_first_terminal(panes: &[serde_json::Value]) -> Option<String> {
-    panes
-        .iter()
-        .find_map(|p| p.get("terminal_id").and_then(|t| t.as_str()).map(str::to_owned))
+    panes.iter().find_map(|p| {
+        p.get("terminal_id")
+            .and_then(|t| t.as_str())
+            .map(str::to_owned)
+    })
 }
 
 /// `brndr attach-proxy <project> [--takeover]` — D127 scoped project-user
@@ -2582,6 +2594,14 @@ mod tests {
     }
 
     #[test]
+    fn remote_mode_label_identifies_isolated_project_owned_session() {
+        assert_eq!(
+            remote_mode_label("slyce@herm-b"),
+            "isolated remote project-owned session (slyce@herm-b)"
+        );
+    }
+
+    #[test]
     fn extract_remote_args_removes_space_form() {
         let args = vec![
             "herdr".into(),
@@ -3537,7 +3557,10 @@ mod tests {
             Some("wS")
         );
         // Requesting herm from a slyce-scoped proxy should NOT match.
-        assert_eq!(select_workspace_id(&workspaces, "herm").as_deref(), Some("wH"));
+        assert_eq!(
+            select_workspace_id(&workspaces, "herm").as_deref(),
+            Some("wH")
+        );
     }
 
     #[test]

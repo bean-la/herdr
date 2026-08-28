@@ -943,6 +943,39 @@ impl ImeCursorShape {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SocketAccessMode {
+    #[default]
+    User,
+    Group,
+}
+
+impl SocketAccessMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Group => "group",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value.trim() {
+            "" | "user" => Ok(Self::User),
+            "group" => Ok(Self::Group),
+            other => Err(format!(
+                "server.socket_access must be \"user\" or \"group\" (got {other:?})"
+            )),
+        }
+    }
+
+    pub fn mode_bits(self) -> u32 {
+        match self {
+            Self::User => 0o600,
+            Self::Group => 0o660,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct ServerConfig {
@@ -950,6 +983,34 @@ pub struct ServerConfig {
     pub headless_cols: u16,
     /// Virtual terminal height used when no client is attached. Default: 40.
     pub headless_rows: u16,
+    /// Control-socket access: `user` (0600, default) or `group` (0660).
+    /// Group mode grants full control-socket access to every member of
+    /// `socket_group`. Restart/handoff required for changes to take effect.
+    pub socket_access: String,
+    /// Group name used when `socket_access = "group"`. Empty in user mode.
+    pub socket_group: String,
+}
+
+impl ServerConfig {
+    pub fn socket_access_mode(&self) -> Result<SocketAccessMode, String> {
+        SocketAccessMode::parse(&self.socket_access)
+    }
+
+    pub fn socket_group_name(&self) -> Option<&str> {
+        let name = self.socket_group.trim();
+        (!name.is_empty()).then_some(name)
+    }
+
+    pub fn socket_access_diagnostic(&self) -> Option<String> {
+        match self.socket_access_mode() {
+            Ok(SocketAccessMode::User) => None,
+            Ok(SocketAccessMode::Group) if self.socket_group_name().is_none() => {
+                Some("server.socket_access = \"group\" requires server.socket_group".to_string())
+            }
+            Ok(SocketAccessMode::Group) => None,
+            Err(err) => Some(err),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -1219,6 +1280,8 @@ impl Default for ServerConfig {
         Self {
             headless_cols: crate::config::DEFAULT_HEADLESS_COLS,
             headless_rows: crate::config::DEFAULT_HEADLESS_ROWS,
+            socket_access: SocketAccessMode::User.as_str().to_string(),
+            socket_group: String::new(),
         }
     }
 }
@@ -1889,6 +1952,58 @@ headless_rows = 50
                 crate::config::DEFAULT_HEADLESS_ROWS
             )
         );
+    }
+
+    #[test]
+    fn server_socket_access_defaults_to_user() {
+        let default_config = Config::default();
+        assert_eq!(
+            default_config.server.socket_access_mode().unwrap(),
+            SocketAccessMode::User
+        );
+        assert_eq!(default_config.server.socket_group_name(), None);
+        assert!(default_config.server.socket_access_diagnostic().is_none());
+
+        let config: Config = toml::from_str(
+            r#"[server]
+socket_access = "group"
+socket_group = "hrm-clients"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.server.socket_access_mode().unwrap(),
+            SocketAccessMode::Group
+        );
+        assert_eq!(config.server.socket_group_name(), Some("hrm-clients"));
+        assert!(config.server.socket_access_diagnostic().is_none());
+    }
+
+    #[test]
+    fn server_socket_access_rejects_unknown_values_and_group_without_name() {
+        let unknown: Config = toml::from_str(
+            r#"[server]
+socket_access = "world"
+"#,
+        )
+        .unwrap();
+        assert!(unknown
+            .server
+            .socket_access_diagnostic()
+            .unwrap()
+            .contains("user"));
+
+        let missing_group: Config = toml::from_str(
+            r#"[server]
+socket_access = "group"
+"#,
+        )
+        .unwrap();
+        assert!(missing_group
+            .server
+            .socket_access_diagnostic()
+            .unwrap()
+            .contains("socket_group"));
     }
 
     #[test]

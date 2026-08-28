@@ -24,7 +24,6 @@ use crate::ipc::{
 
 mod pane_graphics_stream;
 
-const SOCKET_PERMISSION_MODE: u32 = 0o600;
 pub(super) const CONNECTION_POLL_INTERVAL: Duration = Duration::from_millis(100);
 pub(super) const APP_RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
 const INITIAL_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
@@ -91,7 +90,11 @@ fn start_server_inner(
     let listener = bind_local_listener(&path)?;
     restrict_socket_permissions(&path)?;
     let identity = socket_file_identity(&path)?;
-    info!(path = %path.display(), "api server listening");
+    info!(
+        path = %path.display(),
+        access = %crate::socket_access::describe_configured_socket_access(),
+        "api server listening"
+    );
 
     let running = Arc::new(AtomicBool::new(true));
     let listener_running = Arc::clone(&running);
@@ -144,7 +147,7 @@ fn prepare_socket_path(path: &Path) -> std::io::Result<()> {
 }
 
 fn restrict_socket_permissions(path: &Path) -> std::io::Result<()> {
-    crate::ipc::restrict_socket_permissions(path, SOCKET_PERMISSION_MODE)
+    crate::socket_access::apply_configured_socket_access(path)
 }
 
 #[cfg(test)]
@@ -1050,10 +1053,14 @@ mod tests {
         let path = dir.join("api.sock");
         let _listener = UnixListener::bind(&path).unwrap();
 
-        restrict_socket_permissions(&path).unwrap();
+        crate::socket_access::apply_socket_access(
+            &path,
+            &crate::socket_access::SocketAccessPolicy::User,
+        )
+        .unwrap();
 
         let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode, SOCKET_PERMISSION_MODE);
+        assert_eq!(mode, 0o600);
 
         drop(_listener);
         let _ = fs::remove_file(&path);

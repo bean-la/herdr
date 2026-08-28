@@ -481,7 +481,11 @@ impl HeadlessServer {
         let listener = bind_local_listener(&client_path)?;
         restrict_socket_permissions(&client_path)?;
         let client_socket_identity = socket_file_identity(&client_path)?;
-        info!(path = %client_path.display(), "client protocol socket listening");
+        info!(
+            path = %client_path.display(),
+            access = %crate::socket_access::describe_configured_socket_access(),
+            "client protocol socket listening"
+        );
 
         // Set non-blocking on Unix so we can poll it from the event loop.
         #[cfg(unix)]
@@ -5280,6 +5284,13 @@ fn print_ready_message(api_socket: &Path, client_socket: &Path) {
     eprintln!("herdr server running; you can use any herdr CLI command in another terminal.");
     eprintln!("api socket: {}", api_socket.display());
     eprintln!("client socket: {}", client_socket.display());
+    let access = crate::socket_access::describe_configured_socket_access();
+    eprintln!("socket access: {access}");
+    if access.starts_with("group ") {
+        eprintln!(
+            "warning: group mode grants full control-socket access to every member of the configured group"
+        );
+    }
     eprintln!(
         "logs: {}",
         crate::session::data_dir()

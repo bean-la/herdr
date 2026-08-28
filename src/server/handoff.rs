@@ -325,9 +325,7 @@ pub(crate) fn manifest_for(
 
 #[cfg(unix)]
 fn restrict_socket_permissions(path: &Path) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+    crate::socket_access::apply_configured_socket_access(path)
 }
 
 #[cfg(unix)]

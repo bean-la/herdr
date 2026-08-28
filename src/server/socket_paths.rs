@@ -8,9 +8,6 @@ use std::path::{Path, PathBuf};
 /// client-only override when `HERDR_SOCKET_PATH` is not set.
 pub const CLIENT_SOCKET_PATH_ENV_VAR: &str = "HERDR_CLIENT_SOCKET_PATH";
 
-/// Socket permission mode (owner read/write only).
-const SOCKET_PERMISSION_MODE: u32 = 0o600;
-
 /// Returns the path for the client protocol socket.
 ///
 /// Contract-aligned override behavior:
@@ -69,9 +66,9 @@ pub(crate) fn prepare_socket_path(path: &Path) -> io::Result<()> {
     })
 }
 
-/// Restricts socket file permissions to owner-only (0o600).
+/// Restricts socket file permissions using `[server] socket_access`.
 pub(crate) fn restrict_socket_permissions(path: &Path) -> io::Result<()> {
-    crate::ipc::restrict_socket_permissions(path, SOCKET_PERMISSION_MODE)
+    crate::socket_access::apply_configured_socket_access(path)
 }
 
 #[cfg(all(test, unix))]

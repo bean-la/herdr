@@ -94,6 +94,7 @@ mod render_signal;
 mod selection;
 mod server;
 mod session;
+mod socket_access;
 mod sound;
 mod terminal;
 mod terminal_effects;
@@ -259,6 +260,11 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 [server]
 # headless_cols = 120
 # headless_rows = 40
+# Control-socket access. Default "user" keeps API/client sockets 0600.
+# "group" sets 0660 + socket_group after every bind, restart, and handoff.
+# Group mode grants full control-socket access to every member of that group.
+# socket_access = "user" # user | group
+# socket_group = "hrm-clients"
 
 # [worktrees]
 # directory = "~/.herdr/worktrees"

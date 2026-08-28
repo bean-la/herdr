@@ -22,10 +22,10 @@ pub use self::{
     },
     model::{
         validated_sidebar_bounds, AgentPanelSortConfig, Config, ConfigReloadReport,
-        ConfigReloadStatus, HostCursorModeConfig, NewTerminalCwdConfig, ShellModeConfig,
-        SidebarCollapsedModeConfig, StatusIndicatorStyle, TabBarPositionConfig,
-        ToastClipboardPosition, ToastConfig, ToastDelivery, ToastHerdrPosition,
-        UpdateChannelConfig, MAX_TOAST_DELAY_SECONDS,
+        ConfigReloadStatus, HostCursorModeConfig, NewTerminalCwdConfig, ServerConfig,
+        ShellModeConfig, SidebarCollapsedModeConfig, SocketAccessMode, StatusIndicatorStyle,
+        TabBarPositionConfig, ToastClipboardPosition, ToastConfig, ToastDelivery,
+        ToastHerdrPosition, UpdateChannelConfig, MAX_TOAST_DELAY_SECONDS,
     },
     sidebar::{
         AgentSidebarToken, AgentsSidebarConfig, SidebarConfig, SidebarTokenStyle,
@@ -35,8 +35,8 @@ pub use self::{
     tab_bar::TabBarRightEntryConfig,
     theme::{
         parse_color, theme_display_label, theme_is_light, theme_settings_item_count,
-        CustomThemeColors, ThemeAppearanceMode, ThemeConfig, THEME_NAMES,
-        LIGHT_CONFIG_WARNING_FG, THEME_SETTINGS_APPEARANCE_ROWS,
+        CustomThemeColors, ThemeAppearanceMode, ThemeConfig, LIGHT_CONFIG_WARNING_FG, THEME_NAMES,
+        THEME_SETTINGS_APPEARANCE_ROWS,
     },
     window_title::{WindowTitlePart, WindowTitleTemplate, WindowTitleToken},
 };
@@ -97,6 +97,7 @@ impl Config {
             .chain(window_title_diagnostics(&self.ui.window_title))
             .chain(self.invalid_sidebar_bounds_diagnostic())
             .chain(self.invalid_headless_size_diagnostic())
+            .chain(self.invalid_socket_access_diagnostic())
             .collect()
     }
 
@@ -115,6 +116,10 @@ impl Config {
                 self.server.headless_cols, self.server.headless_rows
             )
         })
+    }
+
+    pub(crate) fn invalid_socket_access_diagnostic(&self) -> Option<String> {
+        self.server.socket_access_diagnostic()
     }
 
     pub(crate) fn invalid_sidebar_bounds_diagnostic(&self) -> Option<String> {

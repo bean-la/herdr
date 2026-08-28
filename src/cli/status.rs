@@ -144,10 +144,21 @@ fn print_server_status_body(server: &ServerRuntimeStatus, indent: &str) {
             println!("{indent}protocol: {}", protocol_label(*protocol));
             println!("{indent}compatible: {}", compatibility_label(*protocol));
             println!("{indent}socket: {}", api::socket_path().display());
+            println!(
+                "{indent}socket_access: {}",
+                crate::socket_access::describe_configured_socket_access()
+            );
+            if let Some(mode) = socket_file_mode_label(&api::socket_path()) {
+                println!("{indent}socket_mode: {mode}");
+            }
         }
         ServerRuntimeStatus::NotRunning => {
             println!("{indent}status: not running");
             println!("{indent}socket: {}", api::socket_path().display());
+            println!(
+                "{indent}socket_access: {}",
+                crate::socket_access::describe_configured_socket_access()
+            );
         }
     }
 }
@@ -175,6 +186,20 @@ fn api_client_error_to_io(err: ApiClientError) -> std::io::Error {
 
 fn option_label(value: Option<&str>) -> &str {
     value.unwrap_or("unknown")
+}
+
+fn socket_file_mode_label(path: &std::path::Path) -> Option<String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(path).ok()?.permissions().mode() & 0o777;
+        return Some(format!("{mode:04o}"));
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        None
+    }
 }
 
 fn protocol_label(protocol: Option<u32>) -> String {
@@ -227,6 +252,8 @@ struct ServerStatusJson {
     capabilities: Option<ServerCapabilitiesJson>,
     compatible: Option<bool>,
     socket: String,
+    socket_access: String,
+    socket_mode: Option<String>,
     session: Option<String>,
     restart_needed: Option<bool>,
 }
@@ -271,6 +298,8 @@ fn server_status_json(server: &ServerRuntimeStatus) -> ServerStatusJson {
                 }),
             compatible: protocol.map(|value| value == crate::protocol::PROTOCOL_VERSION),
             socket: api::socket_path().display().to_string(),
+            socket_access: crate::socket_access::describe_configured_socket_access(),
+            socket_mode: socket_file_mode_label(&api::socket_path()),
             session: crate::session::active_name(),
             restart_needed: restart_needed_bool(server),
         },
@@ -282,6 +311,8 @@ fn server_status_json(server: &ServerRuntimeStatus) -> ServerStatusJson {
             capabilities: None,
             compatible: None,
             socket: api::socket_path().display().to_string(),
+            socket_access: crate::socket_access::describe_configured_socket_access(),
+            socket_mode: socket_file_mode_label(&api::socket_path()),
             session: crate::session::active_name(),
             restart_needed: Some(false),
         },
