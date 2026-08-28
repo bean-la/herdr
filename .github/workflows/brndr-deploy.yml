@@ -1,19 +1,9 @@
 name: brndr build and publish
 
-# Herm-owned deploy for the herdr fork's stable branch (2026-08-14, operator
-# decision "A"): builds brndr, installs brndr/herdr to ~/.local/bin
-# on herm-b, and NOTIFIES when a server restart is required. NEVER auto-restarts
-# — restarting the server kills live remote panes, so that stays a manual
-# operator step (see scripts/remote/brndr-install.sh).
-#
-# The actual build runs ON herm-b (brndr-install.sh, which needs the rust/zig
-# toolchain there). This job therefore runs on the registered herm-b
-# self-hosted runner and invokes the install locally; GitHub-hosted runners
-# cannot resolve or reach herm-b over its private tailnet.
-#
-# Mirrors bean-la/herm's dashboard-deploy.yml mechanics: ssh to HERM_HOST as
-# herm (HERM_SSH_KEY secrets), all git/build in clean /tmp worktrees, logic in
-# a scripts/remote/*.sh file (avoids nested bash/YAML/SSH quoting).
+# Build and publish only. Herm owns installation, project-user sync, restart
+# markers, and restart policy in its own IaC. This workflow never SSHes to Herm-b,
+# installs a binary, or restarts a server. Deploydaddy/operator may invoke
+# Herm's scripts/remote/brndr-install.sh for a selected immutable artifact SHA.
 
 on:
   push:
@@ -22,7 +12,6 @@ on:
       - 'src/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
-      - 'scripts/remote/brndr-install.sh'
       - 'scripts/macos-split-linker.sh'
       - '.github/workflows/brndr-deploy.yml'
   workflow_dispatch:
