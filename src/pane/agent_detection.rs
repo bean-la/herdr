@@ -12,6 +12,77 @@ pub(super) const STABLE_VISIBLE_SIGNAL_REFRESH: std::time::Duration =
 pub(super) const AGENT_STARTUP_GRACE_WINDOW: std::time::Duration =
     std::time::Duration::from_secs(3);
 
+/// How aggressively a pane's detection loop polls /proc when idle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub(crate) enum ProcessDetectionPriority {
+    /// Keyboard-focused pane in the active workspace.
+    Focused = 0,
+    /// Other panes in the active workspace.
+    ActiveWorkspace = 1,
+    /// Panes in background workspaces.
+    Background = 2,
+}
+
+impl ProcessDetectionPriority {
+    pub(super) const fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    pub(super) fn from_u8(value: u8) -> Self {
+        match value {
+            0 => Self::Focused,
+            2 => Self::Background,
+            _ => Self::ActiveWorkspace,
+        }
+    }
+}
+
+const PROCESS_DETECTION_IDLE_TICK: std::time::Duration = std::time::Duration::from_secs(1);
+const PROCESS_RECHECK_IDENTIFIED: std::time::Duration = std::time::Duration::from_secs(5);
+const PROCESS_RECHECK_BACKGROUND_IDENTIFIED: std::time::Duration =
+    std::time::Duration::from_secs(15);
+
+pub(super) fn process_detection_idle_tick(
+    priority: ProcessDetectionPriority,
+    identified: bool,
+) -> std::time::Duration {
+    match priority {
+        ProcessDetectionPriority::Focused => {
+            if identified {
+                std::time::Duration::from_millis(500)
+            } else {
+                std::time::Duration::from_millis(500)
+            }
+        }
+        ProcessDetectionPriority::ActiveWorkspace => {
+            if identified {
+                PROCESS_DETECTION_IDLE_TICK
+            } else {
+                std::time::Duration::from_millis(500)
+            }
+        }
+        ProcessDetectionPriority::Background => {
+            if identified {
+                std::time::Duration::from_secs(5)
+            } else {
+                std::time::Duration::from_secs(2)
+            }
+        }
+    }
+}
+
+pub(super) fn process_detection_identified_recheck_interval(
+    priority: ProcessDetectionPriority,
+) -> std::time::Duration {
+    match priority {
+        ProcessDetectionPriority::Focused | ProcessDetectionPriority::ActiveWorkspace => {
+            PROCESS_RECHECK_IDENTIFIED
+        }
+        ProcessDetectionPriority::Background => PROCESS_RECHECK_BACKGROUND_IDENTIFIED,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct DetectionPublishState {
     pub(super) state: AgentState,
@@ -322,6 +393,18 @@ pub(super) fn observe_detection_content_change(bytes: &[u8], detection_content_s
     }
 }
 
+pub(super) fn observe_detection_content_change_and_wake(
+    bytes: &[u8],
+    detection_content_seq: &AtomicU64,
+    wake: &tokio::sync::Notify,
+) {
+    let before = detection_content_seq.load(Ordering::Relaxed);
+    observe_detection_content_change(bytes, detection_content_seq);
+    if detection_content_seq.load(Ordering::Relaxed) != before {
+        wake.notify_one();
+    }
+}
+
 pub(super) fn mark_detection_content_changed(detection_content_seq: &AtomicU64) {
     detection_content_seq.fetch_add(1, Ordering::Relaxed);
 }
@@ -552,5 +635,41 @@ mod tests {
         mark_detection_content_changed(&seq);
 
         assert_eq!(seq.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn process_detection_priority_ticks_scale_with_focus_and_workspace() {
+        assert_eq!(
+            process_detection_idle_tick(ProcessDetectionPriority::Focused, true),
+            std::time::Duration::from_millis(500)
+        );
+        assert_eq!(
+            process_detection_idle_tick(ProcessDetectionPriority::ActiveWorkspace, true),
+            PROCESS_DETECTION_IDLE_TICK
+        );
+        assert_eq!(
+            process_detection_idle_tick(ProcessDetectionPriority::Background, true),
+            std::time::Duration::from_secs(5)
+        );
+        assert!(
+            process_detection_identified_recheck_interval(ProcessDetectionPriority::Background)
+                > process_detection_identified_recheck_interval(
+                    ProcessDetectionPriority::Focused
+                )
+        );
+    }
+
+    #[test]
+    fn process_detection_priority_round_trips_through_atomic_storage() {
+        for priority in [
+            ProcessDetectionPriority::Focused,
+            ProcessDetectionPriority::ActiveWorkspace,
+            ProcessDetectionPriority::Background,
+        ] {
+            assert_eq!(
+                ProcessDetectionPriority::from_u8(priority.as_u8()),
+                priority
+            );
+        }
     }
 }
