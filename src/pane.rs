@@ -288,6 +288,10 @@ async fn apply_agent_detection_publish_update(
 }
 
 const AGENT_MISS_CONFIRMATION_ATTEMPTS: u8 = 6;
+// Keep latent panes cheap: identified agents only need a foreground-process
+// probe at the recheck interval, while the detector loop itself can sleep for
+// a full second instead of waking every 300ms per PTY.
+const PROCESS_DETECTION_IDLE_TICK: std::time::Duration = std::time::Duration::from_secs(1);
 const PROCESS_RECHECK_IDENTIFIED: std::time::Duration = std::time::Duration::from_secs(5);
 const PROCESS_RECHECK_MISSING_FOREGROUND_GROUP: std::time::Duration =
     std::time::Duration::from_secs(30);
@@ -718,7 +722,7 @@ fn spawn_basic_detection_task(
             let sleep_duration = if pending_idle.active() {
                 AGENT_PENDING_IDLE_RECHECK
             } else {
-                std::time::Duration::from_millis(300)
+                PROCESS_DETECTION_IDLE_TICK
             };
             tokio::select! {
                 _ = tokio::time::sleep(sleep_duration) => {}
@@ -2161,7 +2165,7 @@ impl PaneRuntime {
             use std::time::{Duration, Instant};
 
             const TICK_UNIDENTIFIED: Duration = Duration::from_millis(500);
-            const TICK_IDENTIFIED: Duration = Duration::from_millis(300);
+            const TICK_IDENTIFIED: Duration = PROCESS_DETECTION_IDLE_TICK;
             const TICK_PENDING_RELEASE: Duration = Duration::from_millis(50);
 
             let child_pid = child_pid.clone();
