@@ -46,6 +46,74 @@ pub(crate) fn canonical_theme_name(name: &str) -> Option<&'static str> {
     }
 }
 
+/// Whether a built-in theme is a light palette variant.
+pub fn theme_is_light(name: &str) -> bool {
+    matches!(
+        canonical_theme_name(name),
+        Some(
+            "catppuccin-latte"
+                | "tokyo-night-day"
+                | "gruvbox-light"
+                | "one-light"
+                | "solarized-light"
+                | "kanagawa-lotus"
+                | "rose-pine-dawn"
+        )
+    )
+}
+
+/// Settings label for a theme row, e.g. `gruvbox (dark)`.
+pub fn theme_display_label(name: &str) -> String {
+    let kind = if theme_is_light(name) { "light" } else { "dark" };
+    format!("{name} ({kind})")
+}
+
+/// Rows in the theme settings section before the theme list.
+pub const THEME_SETTINGS_APPEARANCE_ROWS: usize = 3;
+
+pub fn theme_settings_item_count() -> usize {
+    THEME_SETTINGS_APPEARANCE_ROWS + THEME_NAMES.len()
+}
+
+/// User-facing pane appearance preference in Settings → theme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemeAppearanceMode {
+    Auto,
+    Light,
+    Dark,
+}
+
+impl ThemeAppearanceMode {
+    pub const ALL: [Self; 3] = [Self::Auto, Self::Light, Self::Dark];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Light => "light",
+            Self::Dark => "dark",
+        }
+    }
+
+    pub fn index(self) -> usize {
+        match self {
+            Self::Auto => 0,
+            Self::Light => 1,
+            Self::Dark => 2,
+        }
+    }
+
+    pub fn from_index(idx: usize) -> Self {
+        match idx {
+            1 => Self::Light,
+            2 => Self::Dark,
+            _ => Self::Auto,
+        }
+    }
+}
+
+/// Config diagnostic warning text on light UI backgrounds.
+pub const LIGHT_CONFIG_WARNING_FG: ratatui::style::Color = ratatui::style::Color::Rgb(138, 90, 0);
+
 /// Theme configuration: pick a built-in or override individual tokens.
 ///
 /// ```toml
@@ -291,5 +359,27 @@ red = "rgb(255, 85, 85)"
         assert!(config.theme.dark_name.is_none());
         assert!(config.theme.light_name.is_none());
         assert!(config.theme.custom.is_none());
+    }
+
+    #[test]
+    fn theme_display_label_marks_light_and_dark_variants() {
+        assert_eq!(theme_display_label("gruvbox"), "gruvbox (dark)");
+        assert_eq!(theme_display_label("gruvbox-light"), "gruvbox-light (light)");
+    }
+
+    #[test]
+    fn light_config_warning_fg_matches_operator_spec() {
+        use ratatui::style::Color;
+        assert_eq!(
+            LIGHT_CONFIG_WARNING_FG,
+            Color::Rgb(138, 90, 0)
+        );
+    }
+
+    #[test]
+    fn theme_appearance_mode_round_trips_index() {
+        for mode in ThemeAppearanceMode::ALL {
+            assert_eq!(ThemeAppearanceMode::from_index(mode.index()), mode);
+        }
     }
 }

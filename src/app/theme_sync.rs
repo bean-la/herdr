@@ -2,6 +2,38 @@ use super::App;
 
 impl App {
     #[cfg(not(windows))]
+    pub(crate) fn apply_theme_appearance_mode(
+        &mut self,
+        mode: crate::config::ThemeAppearanceMode,
+    ) -> bool {
+        use crate::config::ThemeAppearanceMode;
+
+        let mut changed = false;
+        match mode {
+            ThemeAppearanceMode::Auto => {
+                self.state.theme_runtime.auto_switch = true;
+                if self.state.host_terminal_appearance_explicit {
+                    self.state.host_terminal_appearance_explicit = false;
+                    changed = true;
+                }
+                #[cfg(not(windows))]
+                self.query_host_terminal_appearance();
+                changed |= self.refresh_effective_app_theme();
+            }
+            ThemeAppearanceMode::Light => {
+                self.state.theme_runtime.auto_switch = true;
+                self.force_host_terminal_appearance(crate::terminal_theme::HostAppearance::Light);
+                changed = true;
+            }
+            ThemeAppearanceMode::Dark => {
+                self.state.theme_runtime.auto_switch = true;
+                self.force_host_terminal_appearance(crate::terminal_theme::HostAppearance::Dark);
+                changed = true;
+            }
+        }
+        changed
+    }
+
     pub(super) fn query_host_terminal_appearance(&self) {
         use std::io::Write;
 

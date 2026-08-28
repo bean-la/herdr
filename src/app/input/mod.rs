@@ -402,6 +402,9 @@ impl App {
                     }
                     MouseAction::Settings(action) => match action {
                         SettingsAction::SaveTheme(name) => self.save_theme(&name),
+                        SettingsAction::SaveThemeAppearance(mode) => {
+                            self.save_theme_appearance_mode(mode)
+                        }
                         SettingsAction::SaveStatusIndicators(style) => {
                             self.save_status_indicators(style)
                         }

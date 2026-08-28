@@ -485,7 +485,7 @@ fn render_notifications(app: &AppState, frame: &mut Frame, terminal_area: Rect) 
         } else {
             frame.area()
         };
-        render_config_diagnostic(frame, diagnostic_area, message, &app.palette);
+        render_config_diagnostic(frame, diagnostic_area, message, &app.palette, &app.theme_name);
     }
     let mut copy_feedback_offset = u16::from(has_config_diagnostic);
     let mut toast_rect = None;

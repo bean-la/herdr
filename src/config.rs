@@ -33,7 +33,11 @@ pub use self::{
     },
     sound::SoundConfig,
     tab_bar::TabBarRightEntryConfig,
-    theme::{parse_color, CustomThemeColors, ThemeConfig, THEME_NAMES},
+    theme::{
+        parse_color, theme_display_label, theme_is_light, theme_settings_item_count,
+        CustomThemeColors, ThemeAppearanceMode, ThemeConfig, THEME_NAMES,
+        LIGHT_CONFIG_WARNING_FG, THEME_SETTINGS_APPEARANCE_ROWS,
+    },
     window_title::{WindowTitlePart, WindowTitleTemplate, WindowTitleToken},
 };
 

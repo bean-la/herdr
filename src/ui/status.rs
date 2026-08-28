@@ -167,11 +167,26 @@ pub(super) fn render_copy_feedback(
     frame.render_widget(Paragraph::new(text), inner);
 }
 
-pub(super) fn render_config_diagnostic(frame: &mut Frame, area: Rect, message: &str, p: &Palette) {
-    let style = Style::default()
-        .fg(panel_contrast_fg(p))
-        .bg(p.yellow)
-        .add_modifier(Modifier::BOLD);
+pub(super) fn render_config_diagnostic(
+    frame: &mut Frame,
+    area: Rect,
+    message: &str,
+    p: &Palette,
+    theme_name: &str,
+) {
+    use crate::config::{theme_is_light, LIGHT_CONFIG_WARNING_FG};
+
+    let style = if theme_is_light(theme_name) {
+        Style::default()
+            .fg(LIGHT_CONFIG_WARNING_FG)
+            .bg(p.yellow)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+            .fg(panel_contrast_fg(p))
+            .bg(p.yellow)
+            .add_modifier(Modifier::BOLD)
+    };
 
     for (row, line) in message
         .lines()

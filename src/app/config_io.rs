@@ -1,4 +1,5 @@
 use super::App;
+use super::sibling_theme_names;
 
 impl App {
     pub(super) fn update_config_file<F>(&mut self, error_context: &str, update: F) -> bool
@@ -41,7 +42,21 @@ impl App {
         });
     }
 
+    pub(super) fn save_theme_appearance_mode(
+        &mut self,
+        mode: crate::config::ThemeAppearanceMode,
+    ) {
+        self.apply_theme_appearance_mode(mode);
+        if self.update_config_file("theme appearance", |content| {
+            crate::config::upsert_section_bool(content, "theme", "auto_switch", true)
+        }) {
+            self.apply_config_from_disk(false);
+        }
+    }
+
     pub(super) fn save_theme(&mut self, name: &str) {
+        let (dark_name, light_name) = sibling_theme_names(name);
+        let auto_switch = self.state.theme_runtime.auto_switch;
         if self.update_config_file("theme", |content| {
             let content = crate::config::upsert_section_value(
                 content,
@@ -49,7 +64,19 @@ impl App {
                 "name",
                 &format!("\"{name}\""),
             );
-            crate::config::upsert_section_bool(&content, "theme", "auto_switch", false)
+            let content = crate::config::upsert_section_value(
+                &content,
+                "theme",
+                "dark_name",
+                &format!("\"{dark_name}\""),
+            );
+            let content = crate::config::upsert_section_value(
+                &content,
+                "theme",
+                "light_name",
+                &format!("\"{light_name}\""),
+            );
+            crate::config::upsert_section_bool(&content, "theme", "auto_switch", auto_switch)
         }) {
             self.apply_config_from_disk(false);
         }

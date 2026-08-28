@@ -371,17 +371,99 @@ fn render_settings_integrations(app: &AppState, frame: &mut Frame, area: Rect) {
 }
 
 fn render_settings_theme(app: &AppState, frame: &mut Frame, area: Rect) {
-    use crate::app::state::THEME_NAMES;
+    use crate::app::state::{
+        effective_host_appearance_label, theme_appearance_mode_from_state, THEME_NAMES,
+    };
+    use crate::config::{
+        theme_display_label, theme_settings_item_count, ThemeAppearanceMode,
+        THEME_SETTINGS_APPEARANCE_ROWS,
+    };
 
     let p = &app.palette;
+    let rows = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(THEME_SETTINGS_APPEARANCE_ROWS as u16),
+        Constraint::Length(1),
+        Constraint::Min(1),
+    ])
+    .areas::<6>(area);
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![Span::styled(
+            "appearance",
+            Style::default().fg(p.text).add_modifier(Modifier::BOLD),
+        )])),
+        rows[0],
+    );
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![Span::styled(
+            "follow the host terminal or force light/dark pane colors",
+            Style::default().fg(p.overlay1),
+        )])),
+        rows[1],
+    );
+    let effective = effective_host_appearance_label(app);
+    let mode = theme_appearance_mode_from_state(app);
+    let effective_line = if mode == ThemeAppearanceMode::Auto {
+        format!("effective: {effective} (auto)")
+    } else {
+        format!("effective: {effective}")
+    };
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![Span::styled(
+            effective_line,
+            Style::default().fg(p.subtext0),
+        )])),
+        rows[2],
+    );
+
+    let appearance_items: Vec<ListItem> = ThemeAppearanceMode::ALL
+        .iter()
+        .map(|choice| {
+            let marker = if *choice == mode { " ✓" } else { "" };
+            ListItem::new(Line::from(vec![
+                Span::styled(choice.label(), Style::default().fg(p.subtext0)),
+                Span::styled(marker, Style::default().fg(p.green)),
+            ]))
+        })
+        .collect();
+    let appearance_list = List::new(appearance_items)
+        .highlight_style(
+            Style::default()
+                .bg(p.surface0)
+                .fg(p.text)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol(" ▸ ")
+        .style(Style::default().fg(p.subtext0));
+    let appearance_selected = (app.settings.list.selected < THEME_SETTINGS_APPEARANCE_ROWS)
+        .then_some(app.settings.list.selected);
+    let mut appearance_state = ListState::default();
+    if let Some(selected) = appearance_selected {
+        appearance_state.select(Some(selected));
+    }
+    frame.render_stateful_widget(appearance_list, rows[3], &mut appearance_state);
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![Span::styled(
+            "themes",
+            Style::default().fg(p.text).add_modifier(Modifier::BOLD),
+        )])),
+        rows[4],
+    );
+
+    let theme_selected = app.settings.list.selected.saturating_sub(THEME_SETTINGS_APPEARANCE_ROWS);
     let items: Vec<ListItem> = THEME_NAMES
         .iter()
         .map(|name| {
+            let label = theme_display_label(name);
             let is_current = name.to_lowercase().replace([' ', '_'], "-")
                 == app.theme_name.to_lowercase().replace([' ', '_'], "-");
             let marker = if is_current { " ✓" } else { "" };
             ListItem::new(Line::from(vec![
-                Span::styled(*name, Style::default().fg(p.subtext0)),
+                Span::styled(label, Style::default().fg(p.subtext0)),
                 Span::styled(marker, Style::default().fg(p.green)),
             ]))
         })
@@ -397,8 +479,19 @@ fn render_settings_theme(app: &AppState, frame: &mut Frame, area: Rect) {
         .highlight_symbol(" ▸ ")
         .style(Style::default().fg(p.subtext0));
 
-    let mut state = ListState::default().with_selected(Some(app.settings.list.selected));
-    frame.render_stateful_widget(list, area, &mut state);
+    let max_visible = rows[5].height as usize;
+    let scroll = if theme_selected >= max_visible {
+        theme_selected - max_visible + 1
+    } else {
+        0
+    };
+    let mut state = ListState::default().with_selected(Some(theme_selected));
+    if scroll > 0 {
+        state.scroll_down_by(scroll as u16);
+    }
+    frame.render_stateful_widget(list, rows[5], &mut state);
+
+    let _ = theme_settings_item_count();
 }
 
 fn render_settings_toggle(

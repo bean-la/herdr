@@ -306,7 +306,7 @@ fn normalize_theme_name(name: &str) -> String {
     name.to_lowercase().replace([' ', '_'], "-")
 }
 
-fn sibling_theme_names(name: &str) -> (String, String) {
+pub(crate) fn sibling_theme_names(name: &str) -> (String, String) {
     match normalize_theme_name(name).as_str() {
         "catppuccin" | "catppuccin-mocha" | "catppuccin-latte" | "latte" | "light" => {
             ("catppuccin".to_string(), "catppuccin-latte".to_string())

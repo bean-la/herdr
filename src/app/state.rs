@@ -1054,6 +1054,29 @@ impl SettingsSection {
 /// All built-in theme names in display order.
 pub const THEME_NAMES: &[&str] = crate::config::THEME_NAMES;
 
+pub(crate) fn theme_appearance_mode_from_state(state: &AppState) -> crate::config::ThemeAppearanceMode {
+    use crate::config::ThemeAppearanceMode;
+    use crate::terminal_theme::HostAppearance;
+
+    if state.host_terminal_appearance_explicit {
+        return match state.host_terminal_appearance {
+            Some(HostAppearance::Light) => ThemeAppearanceMode::Light,
+            Some(HostAppearance::Dark) | None => ThemeAppearanceMode::Dark,
+        };
+    }
+    ThemeAppearanceMode::Auto
+}
+
+pub(crate) fn effective_host_appearance_label(state: &AppState) -> &'static str {
+    use crate::terminal_theme::HostAppearance;
+
+    match state.host_terminal_appearance {
+        Some(HostAppearance::Light) => "light",
+        Some(HostAppearance::Dark) => "dark",
+        None => "unknown",
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MenuListState {
     pub highlighted: usize,
@@ -2300,6 +2323,31 @@ impl AppState {
 mod tests {
     use super::*;
     use crossterm::event::KeyEvent;
+
+    #[test]
+    fn theme_appearance_mode_reflects_explicit_host_appearance() {
+        use crate::config::ThemeAppearanceMode;
+        use crate::terminal_theme::HostAppearance;
+
+        let mut state = AppState::test_new();
+        assert_eq!(
+            theme_appearance_mode_from_state(&state),
+            ThemeAppearanceMode::Auto
+        );
+
+        state.host_terminal_appearance = Some(HostAppearance::Light);
+        state.host_terminal_appearance_explicit = true;
+        assert_eq!(
+            theme_appearance_mode_from_state(&state),
+            ThemeAppearanceMode::Light
+        );
+
+        state.host_terminal_appearance = Some(HostAppearance::Dark);
+        assert_eq!(
+            theme_appearance_mode_from_state(&state),
+            ThemeAppearanceMode::Dark
+        );
+    }
 
     #[test]
     fn pane_size_estimate_uses_headless_size_before_first_view() {
