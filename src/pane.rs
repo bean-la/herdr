@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::io;
 use std::path::Path;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU64, AtomicU8, Ordering},
+    atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU64, Ordering},
     Arc, Mutex,
 };
 
@@ -36,8 +36,7 @@ mod xtgettcap;
 use self::agent_detection::{
     decide_detection_screen_read, decide_screen_detection_publish,
     detection_update_for_publish_with_osc, mark_detection_content_changed,
-    observe_detection_content_change_and_wake, process_detection_identified_recheck_interval,
-    process_detection_idle_tick, DetectionPublishDecision, DetectionScreenReadDecision,
+    observe_detection_content_change, DetectionPublishDecision, DetectionScreenReadDecision,
     DetectionScreenReadInput, PendingIdleConfirmation, ScreenDetectionPublishInput,
     AGENT_PENDING_IDLE_RECHECK, AGENT_STARTUP_GRACE_WINDOW,
 };
@@ -48,7 +47,6 @@ pub(crate) use self::terminal::{
     TerminalDirtyPatch, TerminalDirtyPatchOutcome, TerminalReadSnapshot, TerminalTextMatch,
     TerminalTextPoint, TerminalWordMotion,
 };
-pub(crate) use self::agent_detection::ProcessDetectionPriority;
 pub use self::{
     state::PaneState,
     terminal::{ScrollMetrics, TerminalCursorState},
@@ -290,6 +288,11 @@ async fn apply_agent_detection_publish_update(
 }
 
 const AGENT_MISS_CONFIRMATION_ATTEMPTS: u8 = 6;
+// Keep latent panes cheap: identified agents only need a foreground-process
+// probe at the recheck interval, while the detector loop itself can sleep for
+// a full second instead of waking every 300ms per PTY.
+const PROCESS_DETECTION_IDLE_TICK: std::time::Duration = std::time::Duration::from_secs(1);
+const PROCESS_RECHECK_IDENTIFIED: std::time::Duration = std::time::Duration::from_secs(5);
 const PROCESS_RECHECK_MISSING_FOREGROUND_GROUP: std::time::Duration =
     std::time::Duration::from_secs(30);
 const PROCESS_ACQUISITION_WINDOW: std::time::Duration = std::time::Duration::from_secs(8);
@@ -297,15 +300,6 @@ const PROCESS_ACQUISITION_FAST_WINDOW: std::time::Duration = std::time::Duration
 const PROCESS_ACQUISITION_FAST_RECHECK: std::time::Duration = std::time::Duration::from_millis(500);
 const PROCESS_ACQUISITION_SLOW_RECHECK: std::time::Duration = std::time::Duration::from_secs(2);
 const PROCESS_ACQUISITION_IDLE_RESET: std::time::Duration = std::time::Duration::from_secs(2);
-
-fn new_process_detection_sync() -> (Arc<AtomicU8>, Arc<Notify>) {
-    (
-        Arc::new(AtomicU8::new(
-            ProcessDetectionPriority::ActiveWorkspace.as_u8(),
-        )),
-        Arc::new(Notify::new()),
-    )
-}
 
 #[derive(Debug, Clone, Copy)]
 struct AgentDetectionPresence {
@@ -426,7 +420,6 @@ struct ProcessProbeInput {
     pending_foreground_shell_clear: bool,
     pending_restore_probe: bool,
     elapsed_since_process_check: std::time::Duration,
-    identified_recheck_interval: std::time::Duration,
 }
 
 fn foreground_group_changed(
@@ -456,7 +449,7 @@ fn should_skip_process_probe_for_lifecycle_authority(
         && !input.pending_foreground_shell_clear
         && input.suppressed_agent.is_none()
         && input.has_process_probe
-        && input.elapsed_since_process_check < input.identified_recheck_interval
+        && input.elapsed_since_process_check < PROCESS_RECHECK_IDENTIFIED
         && !foreground_group_changed(input.foreground_pgid, input.last_foreground_pgid)
 }
 
@@ -473,8 +466,8 @@ fn should_observe_foreground_process_group(
         || input.pending_foreground_shell_clear
         || input.pending_restore_probe
         || content_changed
-        || (lifecycle_authority && elapsed >= input.identified_recheck_interval)
-        || (!lifecycle_authority && input.elapsed_since_process_check >= input.identified_recheck_interval)
+        || (lifecycle_authority && elapsed >= PROCESS_RECHECK_IDENTIFIED)
+        || (!lifecycle_authority && input.elapsed_since_process_check >= PROCESS_RECHECK_IDENTIFIED)
 }
 
 fn should_probe_foreground_job(input: ProcessProbeInput) -> bool {
@@ -509,7 +502,7 @@ fn should_probe_foreground_job(input: ProcessProbeInput) -> bool {
                 && input.elapsed_since_process_check >= PROCESS_RECHECK_MISSING_FOREGROUND_GROUP);
     }
 
-    foreground_group_changed || input.elapsed_since_process_check >= input.identified_recheck_interval
+    foreground_group_changed || input.elapsed_since_process_check >= PROCESS_RECHECK_IDENTIFIED
 }
 
 fn sync_content_change_acquisition(
@@ -694,8 +687,6 @@ fn spawn_basic_detection_task(
     terminal: Arc<PaneTerminal>,
     detection_content_seq: Arc<AtomicU64>,
     full_lifecycle_authority_active: Arc<AtomicBool>,
-    process_detection_priority: Arc<AtomicU8>,
-    detection_wake_notify: Arc<Notify>,
     state_events: mpsc::Sender<AppEvent>,
 ) -> (
     tokio::task::AbortHandle,
@@ -706,7 +697,6 @@ fn spawn_basic_detection_task(
     let detect_reset = detect_reset_notify.clone();
     let pending_release = Arc::new(Mutex::new(None));
     let pending_release_for_task = pending_release.clone();
-    let detection_wake = detection_wake_notify.clone();
 
     let handle = tokio::spawn(async move {
         let mut agent_presence = AgentDetectionPresence::from_agent(None);
@@ -729,16 +719,13 @@ fn spawn_basic_detection_task(
         let mut pending_idle = PendingIdleConfirmation::default();
 
         loop {
-            let priority =
-                ProcessDetectionPriority::from_u8(process_detection_priority.load(Ordering::Relaxed));
             let sleep_duration = if pending_idle.active() {
                 AGENT_PENDING_IDLE_RECHECK
             } else {
-                process_detection_idle_tick(priority, agent_presence.current_agent().is_some())
+                PROCESS_DETECTION_IDLE_TICK
             };
             tokio::select! {
                 _ = tokio::time::sleep(sleep_duration) => {}
-                _ = detection_wake.notified() => {}
                 _ = detect_reset.notified() => {
                     agent_presence = AgentDetectionPresence::from_agent(None);
                     state = AgentState::Unknown;
@@ -779,8 +766,6 @@ fn spawn_basic_detection_task(
                 .flatten();
             let process_group_changed =
                 foreground_group_changed(foreground_pgid, last_foreground_pgid);
-            let identified_recheck_interval =
-                process_detection_identified_recheck_interval(priority);
             let should_check_process = pid > 0 && {
                 let process_probe_input = ProcessProbeInput {
                     current_agent: agent,
@@ -793,7 +778,6 @@ fn spawn_basic_detection_task(
                     pending_foreground_shell_clear,
                     pending_restore_probe: false,
                     elapsed_since_process_check: now.duration_since(last_process_check),
-                    identified_recheck_interval,
                 };
                 !should_skip_process_probe_for_lifecycle_authority(
                     lifecycle_authority_active,
@@ -1065,8 +1049,6 @@ pub struct PaneRuntime {
     content_seq: Arc<AtomicU64>,
     detection_content_seq: Arc<AtomicU64>,
     full_lifecycle_authority_active: Arc<AtomicBool>,
-    process_detection_priority: Arc<AtomicU8>,
-    detection_wake_notify: Arc<Notify>,
     detect_reset_notify: Arc<Notify>,
     pending_release: Arc<Mutex<Option<PendingAgentRelease>>>,
     preserve_processes_on_drop: bool,
@@ -1939,7 +1921,6 @@ impl PaneRuntime {
         let kitty_keyboard_flags = Arc::new(AtomicU16::new(keyboard_protocol_flags));
         let content_seq = Arc::new(AtomicU64::new(0));
         let detection_content_seq = Arc::new(AtomicU64::new(0));
-        let (process_detection_priority, detection_wake_notify) = new_process_detection_sync();
 
         let io = {
             let terminal = terminal.clone();
@@ -1948,7 +1929,6 @@ impl PaneRuntime {
             let render_dirty = render_dirty.clone();
             let content_seq = content_seq.clone();
             let detection_content_seq = detection_content_seq.clone();
-            let detection_wake_notify = detection_wake_notify.clone();
             let child_pid = child_pid.clone();
             let read_events = events.clone();
             let reported_cwd = reported_cwd.clone();
@@ -1961,11 +1941,7 @@ impl PaneRuntime {
                     terminal.process_pty_bytes(pane_id, shell_pid, bytes, &response_writer);
                 content_seq.fetch_add(1, Ordering::Release);
                 publish_terminal_bells(pane_id, result.terminal_bells, &read_events);
-                observe_detection_content_change_and_wake(
-                    bytes,
-                    &detection_content_seq,
-                    &detection_wake_notify,
-                );
+                observe_detection_content_change(bytes, &detection_content_seq);
                 let title_requested =
                     result.terminal_title_changed && render_dirty.request_terminal_title(pane_id);
                 let render_requested = result.request_render && render_dirty.request_pty(pane_id);
@@ -2019,8 +1995,6 @@ impl PaneRuntime {
             terminal.clone(),
             detection_content_seq.clone(),
             full_lifecycle_authority_active.clone(),
-            process_detection_priority.clone(),
-            detection_wake_notify.clone(),
             events,
         );
 
@@ -2036,8 +2010,6 @@ impl PaneRuntime {
             content_seq,
             detection_content_seq,
             full_lifecycle_authority_active,
-            process_detection_priority,
-            detection_wake_notify,
             detect_reset_notify,
             pending_release,
             preserve_processes_on_drop: true,
@@ -2094,7 +2066,6 @@ impl PaneRuntime {
         let content_seq = Arc::new(AtomicU64::new(0));
         let detection_content_seq = Arc::new(AtomicU64::new(0));
         let full_lifecycle_authority_active = Arc::new(AtomicBool::new(false));
-        let (process_detection_priority, detection_wake_notify) = new_process_detection_sync();
         {
             let child_pid = child_pid.clone();
             let child_wait_completed = child_wait_completed.clone();
@@ -2128,7 +2099,6 @@ impl PaneRuntime {
             let render_dirty = render_dirty.clone();
             let content_seq = content_seq.clone();
             let detection_content_seq = detection_content_seq.clone();
-            let detection_wake_notify = detection_wake_notify.clone();
             let child_pid = child_pid.clone();
             let events = events.clone();
             let reported_cwd = reported_cwd.clone();
@@ -2141,11 +2111,7 @@ impl PaneRuntime {
                 content_seq.fetch_add(1, Ordering::Release);
                 publish_terminal_bells(pane_id, result.terminal_bells, &events);
                 if agent_detection == AgentDetection::Enabled {
-                    observe_detection_content_change_and_wake(
-                        bytes,
-                        &detection_content_seq,
-                        &detection_wake_notify,
-                    );
+                    observe_detection_content_change(bytes, &detection_content_seq);
                 }
                 let title_requested =
                     result.terminal_title_changed && render_dirty.request_terminal_title(pane_id);
@@ -2198,6 +2164,8 @@ impl PaneRuntime {
             use crate::detect;
             use std::time::{Duration, Instant};
 
+            const TICK_UNIDENTIFIED: Duration = Duration::from_millis(500);
+            const TICK_IDENTIFIED: Duration = PROCESS_DETECTION_IDLE_TICK;
             const TICK_PENDING_RELEASE: Duration = Duration::from_millis(50);
 
             let child_pid = child_pid.clone();
@@ -2205,8 +2173,6 @@ impl PaneRuntime {
             let state_events = events.clone();
             let detection_content_seq = detection_content_seq.clone();
             let full_lifecycle_authority_active_for_task = full_lifecycle_authority_active.clone();
-            let process_detection_priority_for_task = process_detection_priority.clone();
-            let detection_wake = detection_wake_notify.clone();
             let render_notify = render_notify.clone();
             let render_dirty = render_dirty.clone();
             let detect_reset_notify = Arc::new(Notify::new());
@@ -2242,9 +2208,6 @@ impl PaneRuntime {
 
                 loop {
                     let now_for_tick = Instant::now();
-                    let priority = ProcessDetectionPriority::from_u8(
-                        process_detection_priority_for_task.load(Ordering::Relaxed),
-                    );
                     let tick = if active_pending_release(&pending_release_for_task, now_for_tick)
                         .is_some()
                         || terminal.has_transient_default_color_override()
@@ -2252,15 +2215,13 @@ impl PaneRuntime {
                         TICK_PENDING_RELEASE
                     } else if pending_idle.active() {
                         AGENT_PENDING_IDLE_RECHECK
+                    } else if agent_presence.current_agent().is_none() {
+                        TICK_UNIDENTIFIED
                     } else {
-                        process_detection_idle_tick(
-                            priority,
-                            agent_presence.current_agent().is_some(),
-                        )
+                        TICK_IDENTIFIED
                     };
                     tokio::select! {
                         _ = tokio::time::sleep(tick) => {}
-                        _ = detection_wake.notified() => {}
                         _ = detect_reset.notified() => {
                             agent_presence = AgentDetectionPresence::from_agent(None);
                             state = AgentState::Unknown;
@@ -2295,8 +2256,6 @@ impl PaneRuntime {
                     let mut agent = agent_presence.current_agent();
                     let lifecycle_authority_active =
                         full_lifecycle_authority_active_for_task.load(Ordering::Acquire);
-                    let identified_recheck_interval =
-                        process_detection_identified_recheck_interval(priority);
                     let process_probe_input = ProcessProbeInput {
                         current_agent: agent,
                         suppressed_agent,
@@ -2308,7 +2267,6 @@ impl PaneRuntime {
                         pending_foreground_shell_clear,
                         pending_restore_probe,
                         elapsed_since_process_check: now.duration_since(last_process_check),
-                        identified_recheck_interval,
                     };
                     #[cfg(windows)]
                     let content_seq = detection_content_seq.load(Ordering::Relaxed);
@@ -2319,8 +2277,7 @@ impl PaneRuntime {
                         lifecycle_authority_active,
                         last_content_seq != Some(content_seq)
                             && (last_content_seq.is_some()
-                                || now.duration_since(last_observation.0)
-                                    >= process_detection_idle_tick(priority, true)),
+                                || now.duration_since(last_observation.0) >= TICK_IDENTIFIED),
                         now.duration_since(last_observation.0),
                         process_probe_input,
                     );
@@ -2604,8 +2561,6 @@ impl PaneRuntime {
             content_seq,
             detection_content_seq,
             full_lifecycle_authority_active,
-            process_detection_priority,
-            detection_wake_notify,
             detect_reset_notify,
             pending_release,
             preserve_processes_on_drop: false,
@@ -2644,12 +2599,6 @@ impl PaneRuntime {
         if active && !previous {
             self.detect_reset_notify.notify_one();
         }
-    }
-
-    pub fn set_process_detection_priority(&self, priority: ProcessDetectionPriority) {
-        self.process_detection_priority
-            .store(priority.as_u8(), Ordering::Relaxed);
-        self.detection_wake_notify.notify_one();
     }
 
     pub(crate) fn current_size(&self) -> (u16, u16) {
@@ -3133,10 +3082,6 @@ impl PaneRuntime {
                 content_seq: Arc::new(AtomicU64::new(0)),
                 detection_content_seq: Arc::new(AtomicU64::new(0)),
                 full_lifecycle_authority_active: Arc::new(AtomicBool::new(false)),
-                process_detection_priority: Arc::new(AtomicU8::new(
-                    ProcessDetectionPriority::ActiveWorkspace.as_u8(),
-                )),
-                detection_wake_notify: Arc::new(Notify::new()),
                 detect_reset_notify: Arc::new(Notify::new()),
                 pending_release: Arc::new(Mutex::new(None)),
                 preserve_processes_on_drop: true,
@@ -3696,10 +3641,6 @@ mod tests {
             content_seq: Arc::new(AtomicU64::new(0)),
             detection_content_seq: Arc::new(AtomicU64::new(0)),
             full_lifecycle_authority_active: Arc::new(AtomicBool::new(false)),
-            process_detection_priority: Arc::new(AtomicU8::new(
-                ProcessDetectionPriority::ActiveWorkspace.as_u8(),
-            )),
-            detection_wake_notify: Arc::new(Notify::new()),
             detect_reset_notify: Arc::new(Notify::new()),
             pending_release: Arc::new(Mutex::new(None)),
             preserve_processes_on_drop: true,
@@ -3732,10 +3673,6 @@ mod tests {
             content_seq: Arc::new(AtomicU64::new(0)),
             detection_content_seq: Arc::new(AtomicU64::new(0)),
             full_lifecycle_authority_active: Arc::new(AtomicBool::new(false)),
-            process_detection_priority: Arc::new(AtomicU8::new(
-                ProcessDetectionPriority::ActiveWorkspace.as_u8(),
-            )),
-            detection_wake_notify: Arc::new(Notify::new()),
             detect_reset_notify: Arc::new(Notify::new()),
             pending_release: Arc::new(Mutex::new(None)),
             preserve_processes_on_drop: true,
@@ -3941,9 +3878,6 @@ mod tests {
             pending_foreground_shell_clear: false,
             pending_restore_probe: false,
             elapsed_since_process_check: std::time::Duration::from_secs(1),
-            identified_recheck_interval: process_detection_identified_recheck_interval(
-                ProcessDetectionPriority::Focused,
-            ),
         }
     }
 
@@ -3953,7 +3887,7 @@ mod tests {
             current_agent: Some(Agent::Codex),
             ..process_probe_input()
         };
-        let before_safety_bound = process_detection_identified_recheck_interval(ProcessDetectionPriority::Focused) - std::time::Duration::from_millis(1);
+        let before_safety_bound = PROCESS_RECHECK_IDENTIFIED - std::time::Duration::from_millis(1);
         let content_retry = std::time::Duration::from_millis(300);
         let observe = |lifecycle, content_changed, elapsed, input| {
             should_observe_foreground_process_group(lifecycle, content_changed, elapsed, input)
@@ -3977,11 +3911,11 @@ mod tests {
             false,
             before_safety_bound,
             ProcessProbeInput {
-                elapsed_since_process_check: process_detection_identified_recheck_interval(ProcessDetectionPriority::Focused),
+                elapsed_since_process_check: PROCESS_RECHECK_IDENTIFIED,
                 ..quiet
             }
         ));
-        assert!(observe(true, false, process_detection_identified_recheck_interval(ProcessDetectionPriority::Focused), quiet));
+        assert!(observe(true, false, PROCESS_RECHECK_IDENTIFIED, quiet));
 
         for immediate in [
             ProcessProbeInput {
@@ -4094,7 +4028,7 @@ mod tests {
     fn lifecycle_authority_keeps_periodic_process_probe_for_exit_detection() {
         let input = ProcessProbeInput {
             current_agent: Some(Agent::Pi),
-            elapsed_since_process_check: process_detection_identified_recheck_interval(ProcessDetectionPriority::Focused),
+            elapsed_since_process_check: PROCESS_RECHECK_IDENTIFIED,
             ..process_probe_input()
         };
         assert!(!should_skip_process_probe_for_lifecycle_authority(true, input));
@@ -4108,7 +4042,7 @@ mod tests {
             ProcessProbeInput {
                 current_agent: Some(Agent::Pi),
                 elapsed_since_process_check:
-                    process_detection_identified_recheck_interval(ProcessDetectionPriority::Focused) - std::time::Duration::from_millis(1),
+                    PROCESS_RECHECK_IDENTIFIED - std::time::Duration::from_millis(1),
                 ..process_probe_input()
             }
         ));
@@ -4120,7 +4054,7 @@ mod tests {
             current_agent: Some(Agent::Pi),
             foreground_pgid: None,
             last_foreground_pgid: None,
-            elapsed_since_process_check: process_detection_identified_recheck_interval(ProcessDetectionPriority::Focused),
+            elapsed_since_process_check: PROCESS_RECHECK_IDENTIFIED,
             ..process_probe_input()
         };
         assert!(!should_skip_process_probe_for_lifecycle_authority(
@@ -4377,13 +4311,13 @@ mod tests {
     fn identified_agent_uses_shorter_safety_process_probe() {
         assert!(!should_probe_foreground_job(ProcessProbeInput {
             current_agent: Some(Agent::Codex),
-            elapsed_since_process_check: process_detection_identified_recheck_interval(ProcessDetectionPriority::Focused)
+            elapsed_since_process_check: PROCESS_RECHECK_IDENTIFIED
                 - std::time::Duration::from_millis(1),
             ..process_probe_input()
         }));
         assert!(should_probe_foreground_job(ProcessProbeInput {
             current_agent: Some(Agent::Codex),
-            elapsed_since_process_check: process_detection_identified_recheck_interval(ProcessDetectionPriority::Focused),
+            elapsed_since_process_check: PROCESS_RECHECK_IDENTIFIED,
             ..process_probe_input()
         }));
     }
@@ -4394,7 +4328,7 @@ mod tests {
             current_agent: Some(Agent::Codex),
             foreground_pgid: None,
             last_foreground_pgid: Some(42),
-            elapsed_since_process_check: process_detection_identified_recheck_interval(ProcessDetectionPriority::Focused)
+            elapsed_since_process_check: PROCESS_RECHECK_IDENTIFIED
                 - std::time::Duration::from_millis(1),
             ..process_probe_input()
         }));
@@ -4406,7 +4340,7 @@ mod tests {
             current_agent: Some(Agent::Codex),
             foreground_pgid: None,
             last_foreground_pgid: None,
-            elapsed_since_process_check: process_detection_identified_recheck_interval(ProcessDetectionPriority::Focused)
+            elapsed_since_process_check: PROCESS_RECHECK_IDENTIFIED
                 - std::time::Duration::from_millis(1),
             ..process_probe_input()
         }));
@@ -4414,7 +4348,7 @@ mod tests {
             current_agent: Some(Agent::Codex),
             foreground_pgid: None,
             last_foreground_pgid: None,
-            elapsed_since_process_check: process_detection_identified_recheck_interval(ProcessDetectionPriority::Focused),
+            elapsed_since_process_check: PROCESS_RECHECK_IDENTIFIED,
             ..process_probe_input()
         }));
     }

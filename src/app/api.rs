@@ -469,33 +469,6 @@ impl App {
         }
     }
 
-    pub(crate) fn sync_process_detection_priorities(&self) {
-        let active_ws_idx = self.state.active;
-        let focused_pane = active_ws_idx.and_then(|ws_idx| {
-            self.state.workspaces.get(ws_idx).and_then(|ws| {
-                ws.focused_pane_id().map(|pane_id| (ws_idx, pane_id))
-            })
-        });
-
-        for (ws_idx, workspace) in self.state.workspaces.iter().enumerate() {
-            for tab in &workspace.tabs {
-                for (pane_id, pane) in &tab.panes {
-                    let Some(runtime) = self.terminal_runtimes.get(&pane.attached_terminal_id) else {
-                        continue;
-                    };
-                    let priority = if focused_pane == Some((ws_idx, *pane_id)) {
-                        crate::pane::ProcessDetectionPriority::Focused
-                    } else if active_ws_idx == Some(ws_idx) {
-                        crate::pane::ProcessDetectionPriority::ActiveWorkspace
-                    } else {
-                        crate::pane::ProcessDetectionPriority::Background
-                    };
-                    runtime.set_process_detection_priority(priority);
-                }
-            }
-        }
-    }
-
     pub(crate) fn show_clipboard_feedback(&mut self) {
         if !self.state.toast_config.clipboard.enabled {
             self.state.copy_feedback = None;
@@ -872,7 +845,6 @@ impl App {
     }
 
     pub(crate) fn sync_focus_events(&mut self) {
-        self.sync_process_detection_priorities();
         self.sync_focus_events_with_outer_event(None);
     }
 
