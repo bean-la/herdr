@@ -399,7 +399,7 @@ fn render_settings_theme(app: &AppState, frame: &mut Frame, area: Rect) {
     );
     frame.render_widget(
         Paragraph::new(Line::from(vec![Span::styled(
-            "follow the host terminal or force light/dark pane colors",
+            "appearance mode controls automatic light/dark pairing",
             Style::default().fg(p.overlay1),
         )])),
         rows[1],
@@ -448,7 +448,7 @@ fn render_settings_theme(app: &AppState, frame: &mut Frame, area: Rect) {
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![Span::styled(
-            "themes",
+            "base theme (auto pairs its light/dark variant)",
             Style::default().fg(p.text).add_modifier(Modifier::BOLD),
         )])),
         rows[4],

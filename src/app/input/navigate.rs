@@ -80,6 +80,14 @@ impl App {
             return;
         }
 
+        // Keep the historical prefix+t shortcut for opening the theme picker.
+        // Settings remains available via the configurable prefix+s binding.
+        if key.code == KeyCode::Char('t') && key.modifiers.is_empty() {
+            super::settings::open_settings(&mut self.state);
+            self.state.settings.list.selected = crate::config::THEME_SETTINGS_APPEARANCE_ROWS;
+            return;
+        }
+
         if let Some(action) =
             non_indexed_action_for_key(&self.state, &raw_key, BindingDispatch::Prefix)
         {

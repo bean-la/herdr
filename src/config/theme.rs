@@ -88,9 +88,9 @@ impl ThemeAppearanceMode {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Auto => "auto",
-            Self::Light => "light",
-            Self::Dark => "dark",
+            Self::Auto => "auto (follow terminal)",
+            Self::Light => "light (force)",
+            Self::Dark => "dark (force)",
         }
     }
 

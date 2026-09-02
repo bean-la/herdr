@@ -402,7 +402,8 @@ impl AppState {
                 {
                     return Some(relative - appearance_y);
                 }
-                let themes_y = appearance_y + THEME_SETTINGS_APPEARANCE_ROWS + 1;
+                // The theme list follows the one-line `themes` heading.
+                let themes_y = appearance_y + THEME_SETTINGS_APPEARANCE_ROWS + 2;
                 if relative >= themes_y {
                     let theme_idx = relative - themes_y;
                     if theme_idx < THEME_NAMES.len() {
