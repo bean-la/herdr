@@ -177,6 +177,7 @@ pub(super) fn update_settings_state(state: &mut AppState, key: KeyEvent) -> Opti
             KeyCode::Enter | KeyCode::Char(' ') => {
                 if state.settings.list.selected < THEME_SETTINGS_APPEARANCE_ROWS {
                     let mode = ThemeAppearanceMode::from_index(state.settings.list.selected);
+                    super::modal::leave_modal(state);
                     return Some(SettingsAction::SaveThemeAppearance(mode));
                 }
                 let theme_idx = state.settings.list.selected - THEME_SETTINGS_APPEARANCE_ROWS;
@@ -539,6 +540,7 @@ mod tests {
             action,
             Some(SettingsAction::SaveThemeAppearance(ThemeAppearanceMode::Light))
         );
+        assert_eq!(state.mode, Mode::Terminal);
     }
 
     #[test]
