@@ -22,11 +22,13 @@ impl App {
             }
             ThemeAppearanceMode::Light => {
                 self.state.theme_runtime.auto_switch = false;
+                self.state.theme_runtime.manual_name = "gruvbox-light".to_string();
                 self.force_host_terminal_appearance(crate::terminal_theme::HostAppearance::Light);
                 changed = true;
             }
             ThemeAppearanceMode::Dark => {
                 self.state.theme_runtime.auto_switch = false;
+                self.state.theme_runtime.manual_name = "gruvbox".to_string();
                 self.force_host_terminal_appearance(crate::terminal_theme::HostAppearance::Dark);
                 changed = true;
             }
