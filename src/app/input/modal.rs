@@ -79,11 +79,13 @@ pub(crate) enum GlobalMenuAction {
     Keybinds,
     ReloadConfig,
     Settings,
+    Appearance,
 }
 
 pub(super) fn global_menu_actions(state: &AppState) -> Vec<GlobalMenuAction> {
     let mut actions = vec![
         GlobalMenuAction::Settings,
+        GlobalMenuAction::Appearance,
         GlobalMenuAction::Keybinds,
         GlobalMenuAction::ReloadConfig,
     ];
@@ -141,6 +143,7 @@ pub(super) fn apply_global_menu_action(state: &mut AppState, action: GlobalMenuA
             leave_modal(state);
         }
         GlobalMenuAction::Settings => super::settings::open_settings(state),
+        GlobalMenuAction::Appearance => super::settings::open_settings(state),
     }
 }
 
