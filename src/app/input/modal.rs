@@ -1661,6 +1661,21 @@ mod tests {
     }
 
     #[test]
+    fn global_menu_includes_appearance_and_opens_theme_settings() {
+        let mut state = state_with_workspaces(&["test"]);
+
+        assert!(global_menu_actions(&state).contains(&GlobalMenuAction::Appearance));
+
+        apply_global_menu_action(&mut state, GlobalMenuAction::Appearance);
+
+        assert_eq!(state.mode, Mode::Settings);
+        assert_eq!(
+            state.settings.section,
+            crate::app::state::SettingsSection::Theme
+        );
+    }
+
+    #[test]
     fn global_menu_whats_new_opens_saved_release_notes() {
         let _guard = config_env_lock().lock().unwrap();
         let path = temp_config_path("whats-new-saved-release-notes");
