@@ -21,12 +21,12 @@ impl App {
                 changed |= self.refresh_effective_app_theme();
             }
             ThemeAppearanceMode::Light => {
-                self.state.theme_runtime.auto_switch = true;
+                self.state.theme_runtime.auto_switch = false;
                 self.force_host_terminal_appearance(crate::terminal_theme::HostAppearance::Light);
                 changed = true;
             }
             ThemeAppearanceMode::Dark => {
-                self.state.theme_runtime.auto_switch = true;
+                self.state.theme_runtime.auto_switch = false;
                 self.force_host_terminal_appearance(crate::terminal_theme::HostAppearance::Dark);
                 changed = true;
             }

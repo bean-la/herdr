@@ -47,8 +47,9 @@ impl App {
         mode: crate::config::ThemeAppearanceMode,
     ) {
         self.apply_theme_appearance_mode(mode);
+        let auto_switch = matches!(mode, crate::config::ThemeAppearanceMode::Auto);
         if self.update_config_file("theme appearance", |content| {
-            crate::config::upsert_section_bool(content, "theme", "auto_switch", true)
+            crate::config::upsert_section_bool(content, "theme", "auto_switch", auto_switch)
         }) {
             self.apply_config_from_disk(false);
         }
