@@ -14,6 +14,7 @@ pub(super) struct AgentRow {
     pub(super) pane_id: String,
     pub(super) status: crate::api::schema::AgentStatus,
     pub(super) focused: bool,
+    pub(super) remote: bool,
     pub(super) rows: Vec<Vec<crate::ui::ResolvedToken>>,
 }
 
@@ -81,7 +82,9 @@ pub(super) fn render_agent_panel(
         hits,
         |row| row.rows.len(),
         |buffer, rect, row, hits| {
-            hits.agents.push((rect, row.pane_id.clone()));
+            if !row.remote {
+                hits.agents.push((rect, row.pane_id.clone()));
+            }
             render_agent_row(buffer, rect, row, config);
         },
     );
@@ -373,10 +376,63 @@ pub(super) fn agent_rows(
                 pane_id: agent.pane_id.clone(),
                 status: agent.agent_status,
                 focused: agent.focused,
+                remote: false,
                 rows,
             })
         })
+        .chain(remote_agent_rows(snapshot, config))
         .collect()
+}
+
+fn remote_agent_rows<'a>(
+    snapshot: &'a ClientShellSnapshot,
+    config: &'a ClientShellConfig,
+) -> impl Iterator<Item = AgentRow> + 'a {
+    snapshot
+        .remote_agents
+        .iter()
+        .filter(|_| snapshot.agent_view_label.is_none())
+        .map(|agent| {
+            let status = remote_agent_status(&agent.status);
+            let label = format!("{} · {}", agent.project, agent.lane);
+            let tokens = agent
+                .session_memo
+                .as_ref()
+                .filter(|memo| !memo.is_empty())
+                .map(|memo| HashMap::from([("session_memo".to_string(), memo.clone())]))
+                .unwrap_or_default();
+            let rows = crate::ui::sidebar_agent_rows(
+                &config.agents,
+                crate::ui::AgentTokenContext {
+                    machine: Some("remote"),
+                    workspace: &agent.project,
+                    tab: Some("remote project-user"),
+                    pane: None,
+                    agent_label: Some(label.as_str()),
+                    terminal_title: None,
+                    terminal_title_stripped: None,
+                    canonical_agent: None,
+                    tokens: &tokens,
+                },
+                sidebar_status_text(status),
+            );
+            AgentRow {
+                pane_id: format!("remote:{}", agent.agent_id),
+                status,
+                focused: false,
+                remote: true,
+                rows,
+            }
+        })
+}
+
+fn remote_agent_status(status: &str) -> crate::api::schema::AgentStatus {
+    match status {
+        "working" => crate::api::schema::AgentStatus::Working,
+        "blocked" => crate::api::schema::AgentStatus::Blocked,
+        "done" => crate::api::schema::AgentStatus::Done,
+        _ => crate::api::schema::AgentStatus::Idle,
+    }
 }
 
 pub(super) fn render_agent_row(
@@ -391,14 +447,19 @@ pub(super) fn render_agent_row(
     } else {
         Style::default()
     };
+    let remote_modifier = if row.remote {
+        Modifier::DIM | Modifier::ITALIC
+    } else {
+        Modifier::empty()
+    };
     let name_style = if row.focused {
         Style::default()
             .fg(palette.text)
-            .add_modifier(Modifier::BOLD)
+            .add_modifier(Modifier::BOLD | remote_modifier)
     } else {
         Style::default()
             .fg(palette.subtext0)
-            .add_modifier(Modifier::BOLD)
+            .add_modifier(Modifier::BOLD | remote_modifier)
     };
     let status_style = Style::default()
         .fg(status_color(row.status, palette))

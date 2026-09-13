@@ -82,6 +82,8 @@ build_linux() {
       # Host macOS builds write into vendor/libghostty-vt/zig-out on the bind mount.
       # Clear vendored Zig outputs so the Linux link sees amd64 libghostty-vt.
       rm -rf vendor/libghostty-vt/zig-out vendor/libghostty-vt/.zig-cache
+      # Force build.rs to rebuild vendored libghostty-vt after clearing zig-out.
+      cargo clean -p herdr
       cargo build --release --locked
       mkdir -p "$OUT_DIR"
       cp "$CARGO_TARGET_DIR/release/brndr" "$OUT_DIR/herdr-linux-x86_64"

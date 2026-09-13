@@ -1395,3 +1395,170 @@ fn semantic_notifications_use_client_policy_and_stable_navigation_targets() {
     assert!(state.visible_notification.is_none());
     assert_eq!(state.pending_notifications.len(), 1);
 }
+
+fn remote_presence_agent() -> crate::protocol::ClientShellRemoteAgent {
+    crate::protocol::ClientShellRemoteAgent {
+        agent_id: "herm-b-slyce-perky".into(),
+        project: "slyce".into(),
+        lane: "perky-e9fb".into(),
+        status: "idle".into(),
+        user: "slyce".into(),
+        cwd: None,
+        process_alive: true,
+        stream_alive: true,
+        last_seen_ts: None,
+        session_memo: None,
+    }
+}
+
+#[test]
+fn remote_presence_rows_render_without_click_targets() {
+    let mut projected = snapshot();
+    projected.agents.push(ClientShellAgent {
+        pane_id: "pane_1".into(),
+        workspace_id: "ws_1".into(),
+        tab_id: "tab_1".into(),
+        name: Some("local pi".into()),
+        display_agent: None,
+        agent: Some("pi".into()),
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        agent_status: AgentStatus::Working,
+        state_change_seq: 1,
+        state_labels: Vec::new(),
+        tokens: Vec::new(),
+        focused: true,
+    });
+    projected.remote_agents = vec![remote_presence_agent()];
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("presence sidebar frame");
+    let text = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.contains("slyce · perky-e9fb"), "frame: {text}");
+    assert!(
+        state
+            .hits
+            .agents
+            .iter()
+            .all(|(_, pane_id)| !pane_id.starts_with("remote:")),
+        "remote rows must not register click targets"
+    );
+    assert_eq!(state.hits.agents.len(), 1);
+}
+
+#[test]
+fn focus_agent_and_next_agent_skip_remote_presence_rows() {
+    let mut projected = snapshot();
+    projected.agents.push(ClientShellAgent {
+        pane_id: "pane_1".into(),
+        workspace_id: "ws_1".into(),
+        tab_id: "tab_1".into(),
+        name: Some("local pi".into()),
+        display_agent: None,
+        agent: Some("pi".into()),
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        agent_status: AgentStatus::Working,
+        state_change_seq: 1,
+        state_labels: Vec::new(),
+        tokens: Vec::new(),
+        focused: true,
+    });
+    projected.remote_agents = vec![remote_presence_agent()];
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    state.compose(106, 30).expect("presence sidebar frame");
+
+    let mut focus = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::FocusAgent(0)),
+        &mut focus,
+    );
+    assert!(matches!(
+        &focus.actions[..],
+        [ClientShellAction::Endpoint { request, .. }]
+            if matches!(
+                &request.method,
+                crate::api::schema::Method::PaneFocus(target) if target.pane_id == "pane_1"
+            )
+    ));
+
+    let mut next = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::NextAgent),
+        &mut next,
+    );
+    assert!(matches!(
+        &next.actions[..],
+        [ClientShellAction::Endpoint { request, .. }]
+            if matches!(
+                &request.method,
+                crate::api::schema::Method::PaneFocus(target) if target.pane_id == "pane_1"
+            )
+    ));
+}
+
+#[test]
+fn remote_presence_rows_remain_visible_when_scope_filters_local_agents() {
+    let mut projected = snapshot();
+    let mut second_workspace = projected.workspaces[0].clone();
+    second_workspace.workspace_id = "ws_2".into();
+    second_workspace.number = 2;
+    second_workspace.label = "other-workspace".into();
+    second_workspace.focused = false;
+    projected.workspaces.push(second_workspace);
+    projected.agents.push(ClientShellAgent {
+        pane_id: "pane_2".into(),
+        workspace_id: "ws_2".into(),
+        tab_id: "tab_1".into(),
+        name: Some("other ws pi".into()),
+        display_agent: None,
+        agent: Some("pi".into()),
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        agent_status: AgentStatus::Idle,
+        state_change_seq: 1,
+        state_labels: Vec::new(),
+        tokens: Vec::new(),
+        focused: false,
+    });
+    projected.remote_agents = vec![remote_presence_agent()];
+    let mut config = Config::default();
+    config.ui.agent_panel_scope = crate::config::AgentPanelScopeConfig::ActiveWorkspace;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("scoped presence sidebar");
+    let text = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !text.contains("other ws pi"),
+        "local agent in another workspace should be hidden in here scope: {text}"
+    );
+    assert!(
+        text.contains("slyce · perky-e9fb"),
+        "remote presence rows stay visible in here scope: {text}"
+    );
+}

@@ -34,6 +34,7 @@ impl App {
                 results,
                 cache_updates,
             } => self.handle_git_status_refreshed(results, cache_updates),
+            AppEvent::PresenceRefreshed { result } => self.handle_presence_refreshed(result),
             AppEvent::TabBarCommandFinished {
                 generation,
                 segment_index,
@@ -113,6 +114,11 @@ impl App {
         } = ev
         {
             self.handle_git_status_refreshed(results, cache_updates);
+            return Vec::new();
+        }
+
+        if let AppEvent::PresenceRefreshed { result } = ev {
+            self.handle_presence_refreshed(result);
             return Vec::new();
         }
 

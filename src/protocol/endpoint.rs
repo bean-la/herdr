@@ -183,6 +183,7 @@ mod tests {
             tabs: Vec::new(),
             panes: Vec::new(),
             agents: Vec::new(),
+            remote_agents: Vec::new(),
             commands: Vec::new(),
         }
     }

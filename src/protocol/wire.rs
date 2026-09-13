@@ -938,6 +938,8 @@ pub struct ClientShellSnapshot {
     pub tabs: Vec<ClientShellTab>,
     pub panes: Vec<ClientShellPane>,
     pub agents: Vec<ClientShellAgent>,
+    #[serde(default)]
+    pub remote_agents: Vec<ClientShellRemoteAgent>,
     pub commands: Vec<ClientShellCommand>,
 }
 
@@ -1074,6 +1076,20 @@ pub struct ClientShellAgent {
     pub state_labels: Vec<(String, String)>,
     pub tokens: Vec<(String, String)>,
     pub focused: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClientShellRemoteAgent {
+    pub agent_id: String,
+    pub project: String,
+    pub lane: String,
+    pub status: String,
+    pub user: String,
+    pub cwd: Option<String>,
+    pub process_alive: bool,
+    pub stream_alive: bool,
+    pub last_seen_ts: Option<String>,
+    pub session_memo: Option<String>,
 }
 
 /// Origin-relative geometry for one pane in a rendered pane surface.
@@ -2725,6 +2741,7 @@ mod tests {
                 right_click_passthrough: false,
             }],
             agents: Vec::new(),
+            remote_agents: Vec::new(),
             commands: vec![ClientShellCommand {
                 command_id: "cmd_0123456789abcdef0123456789abcdef".into(),
                 binding_label: "prefix+z".into(),
