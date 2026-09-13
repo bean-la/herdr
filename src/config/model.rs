@@ -106,6 +106,7 @@ pub enum AgentPanelSortConfig {
 pub enum AgentPanelScopeConfig {
     #[default]
     All,
+    #[serde(alias = "current")]
     ActiveWorkspace,
 }
 

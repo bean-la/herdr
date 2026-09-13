@@ -118,37 +118,100 @@ pub(super) fn render_agent_panel_header(
             .fg(config.palette.overlay0)
             .add_modifier(Modifier::BOLD),
     );
-    let sort_label = agent_view_label.unwrap_or(match config.agent_panel_sort {
+    let header_y = area.y + 1;
+    if let Some(label) = agent_view_label {
+        let label_width = display_width(label).min(area.width as usize) as u16;
+        let label_rect = Rect::new(
+            area.right().saturating_sub(label_width),
+            header_y,
+            label_width,
+            1,
+        );
+        put_text(
+            buffer,
+            label_rect.x,
+            label_rect.y,
+            label_rect.width,
+            label,
+            Style::default()
+                .fg(config.palette.accent)
+                .add_modifier(Modifier::BOLD),
+        );
+        return true;
+    }
+
+    let sort_label = match config.agent_panel_sort {
         crate::config::AgentPanelSortConfig::Spaces => "grouped",
         crate::config::AgentPanelSortConfig::Priority => "priority",
-    });
+    };
+    let scope_label = agent_panel_scope_label(config.agent_panel_scope);
+    let separator = " · ";
+    let scope_width = display_width(scope_label).min(area.width as usize) as u16;
+    let separator_width = display_width(separator).min(area.width as usize) as u16;
     let sort_width = display_width(sort_label).min(area.width as usize) as u16;
+    let total_width = sort_width
+        .saturating_add(separator_width)
+        .saturating_add(scope_width)
+        .min(area.width);
+    let right_edge = area.right();
+    let scope_rect = Rect::new(
+        right_edge.saturating_sub(scope_width),
+        header_y,
+        scope_width,
+        1,
+    );
     let sort_rect = Rect::new(
-        area.right().saturating_sub(sort_width),
-        area.y + 1,
+        right_edge.saturating_sub(total_width),
+        header_y,
         sort_width,
         1,
     );
-    hits.agent_sort_toggle = if config.mouse_capture && agent_view_label.is_none() {
+    let separator_rect = Rect::new(
+        sort_rect.right(),
+        header_y,
+        separator_width.min(right_edge.saturating_sub(scope_rect.x)),
+        1,
+    );
+    hits.agent_sort_toggle = if config.mouse_capture {
         sort_rect
     } else {
         Rect::default()
     };
+    hits.agent_scope_toggle = if config.mouse_capture {
+        scope_rect
+    } else {
+        Rect::default()
+    };
+    let toggle_style = Style::default()
+        .fg(config.palette.overlay0)
+        .add_modifier(Modifier::BOLD);
+    put_text(buffer, sort_rect.x, sort_rect.y, sort_rect.width, sort_label, toggle_style);
     put_text(
         buffer,
-        sort_rect.x,
-        sort_rect.y,
-        sort_rect.width,
-        sort_label,
-        Style::default()
-            .fg(if agent_view_label.is_some() {
-                config.palette.accent
-            } else {
-                config.palette.overlay0
-            })
-            .add_modifier(Modifier::BOLD),
+        separator_rect.x,
+        separator_rect.y,
+        separator_rect.width,
+        separator,
+        Style::default().fg(config.palette.surface_dim),
+    );
+    put_text(
+        buffer,
+        scope_rect.x,
+        scope_rect.y,
+        scope_rect.width,
+        scope_label,
+        toggle_style,
     );
     true
+}
+
+fn agent_panel_scope_label(
+    scope: crate::config::AgentPanelScopeConfig,
+) -> &'static str {
+    match scope {
+        crate::config::AgentPanelScopeConfig::All => "all",
+        crate::config::AgentPanelScopeConfig::ActiveWorkspace => "here",
+    }
 }
 
 pub(super) fn render_agent_list<T>(

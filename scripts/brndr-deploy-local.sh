@@ -163,7 +163,8 @@ do_vps() {
 
   if [[ "$DO_RESTART" == "1" ]]; then
     echo "==> Restarting brndr on herm-b (--restart)"
-    ssh "$HERM_HOST" "sudo -u herm bash '$REMOTE_RESTART_SCRIPT'"
+    ssh "$HERM_HOST" \
+      "sudo -u herm env PATH='/home/herm/.local/bin:\$PATH' BRNDR_BIN=/home/herm/.local/bin/brndr bash '$REMOTE_RESTART_SCRIPT'"
   else
     echo "  restart skipped (pass --restart to restart brndr on herm-b)"
   fi

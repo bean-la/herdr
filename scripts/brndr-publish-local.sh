@@ -77,10 +77,14 @@ build_linux() {
       curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz
       tar -xJf /tmp/zig.tar.xz -C /opt
       export PATH="/opt/zig-x86_64-linux-${ZIG_VERSION}:$PATH"
+      export CARGO_TARGET_DIR="/work/target/docker-linux-amd64"
       zig version
+      # Host macOS builds write into vendor/libghostty-vt/zig-out on the bind mount.
+      # Clear vendored Zig outputs so the Linux link sees amd64 libghostty-vt.
+      rm -rf vendor/libghostty-vt/zig-out vendor/libghostty-vt/.zig-cache
       cargo build --release --locked
       mkdir -p "$OUT_DIR"
-      cp target/release/brndr "$OUT_DIR/herdr-linux-x86_64"
+      cp "$CARGO_TARGET_DIR/release/brndr" "$OUT_DIR/herdr-linux-x86_64"
       chmod 0755 "$OUT_DIR/herdr-linux-x86_64"
       (
         cd "$OUT_DIR"
