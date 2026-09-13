@@ -111,16 +111,6 @@ pub(super) fn render_agent_panel_header(
     if area.height < 2 {
         return false;
     }
-    put_text(
-        buffer,
-        area.x,
-        area.y + 1,
-        area.width,
-        " agents",
-        Style::default()
-            .fg(config.palette.overlay0)
-            .add_modifier(Modifier::BOLD),
-    );
     let header_y = area.y + 1;
     if let Some(label) = agent_view_label {
         let label_width = display_width(label).min(area.width as usize) as u16;
@@ -214,6 +204,56 @@ fn agent_panel_scope_label(
     match scope {
         crate::config::AgentPanelScopeConfig::All => "all",
         crate::config::AgentPanelScopeConfig::ActiveWorkspace => "here",
+    }
+}
+
+/// Workspace used by the "here" agent-panel scope.
+///
+/// Per-client shell location can lag behind the focused pane on multi-client VPS
+/// hosts, so fall back to the focused agent/pane workspace before filtering.
+fn effective_scope_workspace_id(snapshot: &ClientShellSnapshot) -> Option<&str> {
+    snapshot
+        .focused_workspace_id
+        .as_deref()
+        .or_else(|| {
+            snapshot
+                .agents
+                .iter()
+                .find(|agent| agent.focused)
+                .map(|agent| agent.workspace_id.as_str())
+        })
+        .or_else(|| {
+            snapshot
+                .focused_pane_id
+                .as_deref()
+                .and_then(|pane_id| {
+                    snapshot
+                        .panes
+                        .iter()
+                        .find(|pane| pane.pane_id == pane_id)
+                        .map(|pane| pane.workspace_id.as_str())
+                })
+        })
+        .or_else(|| {
+            snapshot
+                .workspaces
+                .iter()
+                .find(|workspace| workspace.focused)
+                .map(|workspace| workspace.workspace_id.as_str())
+        })
+}
+
+fn agent_matches_scope(
+    snapshot: &ClientShellSnapshot,
+    agent_workspace_id: &str,
+    scope: crate::config::AgentPanelScopeConfig,
+) -> bool {
+    if scope == crate::config::AgentPanelScopeConfig::All {
+        return true;
+    }
+    match effective_scope_workspace_id(snapshot) {
+        Some(workspace_id) => agent_workspace_id == workspace_id,
+        None => true,
     }
 }
 
@@ -312,8 +352,7 @@ pub(super) fn agent_rows(
                 .agents
                 .iter()
                 .find(|agent| agent.pane_id == pane_id)?;
-            if config.agent_panel_scope == crate::config::AgentPanelScopeConfig::ActiveWorkspace
-                && Some(agent.workspace_id.as_str()) != snapshot.focused_workspace_id.as_deref()
+            if !agent_matches_scope(snapshot, agent.workspace_id.as_str(), config.agent_panel_scope)
             {
                 return None;
             }

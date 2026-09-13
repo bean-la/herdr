@@ -1512,6 +1512,55 @@ fn focus_agent_and_next_agent_skip_remote_presence_rows() {
 }
 
 #[test]
+fn here_scope_uses_focused_agent_workspace_when_focused_workspace_id_is_stale() {
+    let mut projected = snapshot();
+    let mut slyce_workspace = projected.workspaces[0].clone();
+    slyce_workspace.workspace_id = "ws_slyce".into();
+    slyce_workspace.number = 2;
+    slyce_workspace.label = "slyce".into();
+    slyce_workspace.focused = true;
+    projected.workspaces.push(slyce_workspace);
+    projected.workspaces[0].focused = false;
+    projected.focused_workspace_id = Some("ws_1".into());
+    projected.agents.push(ClientShellAgent {
+        pane_id: "pane_slyce".into(),
+        workspace_id: "ws_slyce".into(),
+        tab_id: "tab_slyce".into(),
+        name: Some("goaldaddy".into()),
+        display_agent: None,
+        agent: Some("pi".into()),
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        agent_status: AgentStatus::Working,
+        state_change_seq: 1,
+        state_labels: Vec::new(),
+        tokens: Vec::new(),
+        focused: true,
+    });
+    let mut config = Config::default();
+    config.ui.agent_panel_scope = crate::config::AgentPanelScopeConfig::ActiveWorkspace;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("stale focused workspace scope");
+    let text = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        text.contains("goaldaddy"),
+        "focused agent in slyce should remain visible in here scope: {text}"
+    );
+}
+
+#[test]
 fn remote_presence_rows_remain_visible_when_scope_filters_local_agents() {
     let mut projected = snapshot();
     let mut second_workspace = projected.workspaces[0].clone();
