@@ -25,8 +25,7 @@ concurrency:
 jobs:
   build-publish-linux:
     name: Build + publish Linux artifact
-    # Must run on herm-b: the host is private tailnet-only and the build
-    # requires the toolchain installed there.
+    # Linux builds run on GitHub-hosted runners; deployment is handled by Herm IaC.
     runs-on: ubuntu-latest
 
     env:
@@ -52,6 +51,18 @@ jobs:
         with:
           version: 0.16.0
 
+      - name: Cache Rust and Zig build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+            .zig-cache
+            vendor/libghostty-vt/.zig-cache
+            vendor/libghostty-vt/zig-out
+          key: brndr-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ hashFiles('Cargo.lock', 'vendor/libghostty-vt/build.zig*') }}
+
       - name: Install Linux build tools
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
 
@@ -74,8 +85,6 @@ jobs:
           gh release create "$tag" --repo bean-la/herdr --target "$GITHUB_SHA" \
             --title "$tag" --notes "Immutable brndr build for ${GITHUB_SHA}." \
             herdr-linux-x86_64 BUILD_INFO-linux.txt
-          gh release upload brndr-latest --repo bean-la/herdr --clobber \
-            herdr-linux-x86_64 BUILD_INFO-linux.txt || true
 
   # macOS build for the laptop, from the SAME settled commit as the herm-b
   # linux build — so brndr --remote's version-match check passes against
@@ -109,11 +118,20 @@ jobs:
         with:
           version: 0.16.0
 
+      - name: Cache Rust and Zig build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+            .zig-cache
+            vendor/libghostty-vt/.zig-cache
+            vendor/libghostty-vt/zig-out
+          key: brndr-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN_VERSION }}-aarch64-apple-darwin-${{ hashFiles('Cargo.lock', 'vendor/libghostty-vt/build.zig*') }}
+
       - name: Install macOS build tools
         run: brew install cmake ninja
-
-      - name: Remove Zig caches
-        run: rm -rf .zig-cache vendor/libghostty-vt/.zig-cache vendor/libghostty-vt/zig-out
 
       - name: Build
         # zig 0.15.2's archive has a misaligned compiler_rt.o that Apple ld64
@@ -148,13 +166,37 @@ jobs:
             BUILD_INFO.txt
           retention-days: 14
 
-      - name: Publish to brndr-latest release
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: herdr-macos-aarch64
+          path: |
+            herdr-macos-aarch64
+            BUILD_INFO.txt
+          retention-days: 14
+
+  publish-rolling:
+    name: Publish brndr-latest release
+    needs: [build-publish-linux, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Publish immutable and rolling artifacts
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           REPO=bean-la/herdr
+          tag="brndr-${GITHUB_SHA}"
+          gh release create "$tag" --repo "$REPO" --target "$GITHUB_SHA" \
+            --title "$tag" --notes "Immutable brndr build for ${GITHUB_SHA}." \
+            artifacts/herdr-linux-x86_64/herdr-linux-x86_64 artifacts/herdr-linux-x86_64/BUILD_INFO-linux.txt \
+            artifacts/herdr-macos-aarch64/herdr-macos-aarch64 artifacts/herdr-macos-aarch64/BUILD_INFO.txt
           gh release view brndr-latest --repo "$REPO" >/dev/null 2>&1 \
             || gh release create brndr-latest --repo "$REPO" --latest=false \
-                 --title "brndr rolling builds" \
-                 --notes "Rolling herdr fork builds for the settled commit — herm-b installs the linux build, laptops fetch the macos build."
-          gh release upload brndr-latest --repo "$REPO" --clobber herdr-macos-aarch64 BUILD_INFO.txt
+                 --title "brndr rolling builds" --notes "Rolling herdr fork builds for the settled commit."
+          gh release upload brndr-latest --repo "$REPO" --clobber \
+            artifacts/herdr-linux-x86_64/herdr-linux-x86_64 artifacts/herdr-linux-x86_64/BUILD_INFO-linux.txt \
+            artifacts/herdr-macos-aarch64/herdr-macos-aarch64 artifacts/herdr-macos-aarch64/BUILD_INFO.txt
