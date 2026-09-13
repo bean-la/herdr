@@ -82,9 +82,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="brndr-${GITHUB_SHA}"
-          gh release create "$tag" --repo bean-la/herdr --target "$GITHUB_SHA" \
-            --title "$tag" --notes "Immutable brndr build for ${GITHUB_SHA}." \
-            herdr-linux-x86_64 BUILD_INFO-linux.txt
+          if gh release view "$tag" --repo bean-la/herdr >/dev/null 2>&1; then
+            echo "Release $tag already exists; skipping immutable release creation"
+          else
+            gh release create "$tag" --repo bean-la/herdr --target "$GITHUB_SHA" \
+              --title "$tag" --notes "Immutable brndr build for ${GITHUB_SHA}." \
+              herdr-linux-x86_64 BUILD_INFO-linux.txt
+          fi
 
   # macOS build for the laptop, from the SAME settled commit as the herm-b
   # linux build — so brndr --remote's version-match check passes against
