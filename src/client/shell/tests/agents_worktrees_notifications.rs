@@ -648,6 +648,7 @@ fn active_agent_view_controls_sidebar_order_and_focus_indices() {
     );
     assert_eq!(state.hits.agent_sort_toggle, Rect::default());
     assert_eq!(state.hits.agent_scope_toggle, Rect::default());
+    assert_eq!(state.hits.agent_remotes_toggle, Rect::default());
 
     let mut focus = ClientShellInput::default();
     state.record_binding(
@@ -792,6 +793,88 @@ fn agent_scope_toggle_is_client_local_and_persists_per_endpoint() {
     );
     assert!(reloaded.agent_panel_scope_manual);
     std::fs::remove_file(path).expect("remove agent scope preferences");
+}
+
+#[test]
+fn agent_remotes_toggle_hides_presence_and_persists_per_endpoint() {
+    let path = std::env::temp_dir().join(format!(
+        "herdr-shell-agent-remotes-{}-{}.json",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos()
+    ));
+    let mut projected = snapshot();
+    projected.workspaces[0].label = "herm".into();
+    projected.remote_agents = vec![crate::protocol::ClientShellRemoteAgent {
+        agent_id: "sebluair-herm-groovy-16be".into(),
+        project: "herm".into(),
+        lane: "groovy-16be".into(),
+        status: "idle".into(),
+        user: "herm".into(),
+        cwd: None,
+        process_alive: true,
+        stream_alive: true,
+        last_seen_ts: None,
+        session_memo: None,
+    }];
+    let config =
+        ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone());
+    let mut state = ClientShellState::new(config);
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    let shown = state.compose(106, 30).expect("remotes visible sidebar");
+    let shown_text = shown
+        .cells
+        .chunks(shown.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        shown_text.contains("groovy-16be"),
+        "ad-hoc presence should keep the nickname, not only the suffix: {shown_text}"
+    );
+    let toggle = state.hits.agent_remotes_toggle;
+    let click = state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: toggle.x,
+        row: toggle.y,
+        modifiers: KeyModifiers::empty(),
+    })]);
+    assert_eq!(
+        state.config.agent_panel_remotes,
+        crate::config::AgentPanelRemotesConfig::Hide
+    );
+    assert!(click.actions.is_empty());
+    let hidden = state.compose(106, 30).expect("remotes hidden sidebar");
+    let hidden_text = hidden
+        .cells
+        .chunks(hidden.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !hidden_text.contains("groovy-16be"),
+        "local mode should hide presence rows: {hidden_text}"
+    );
+    let reloaded_config =
+        ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone());
+    let reloaded = ClientShellState::new(reloaded_config);
+    assert_eq!(
+        reloaded.config.agent_panel_remotes,
+        crate::config::AgentPanelRemotesConfig::Hide
+    );
+    assert!(reloaded.agent_panel_remotes_manual);
+    std::fs::remove_file(path).expect("remove agent remotes preferences");
 }
 
 #[test]

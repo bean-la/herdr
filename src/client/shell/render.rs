@@ -308,6 +308,7 @@ pub(super) fn render_shell(
         hits.agent_scrollbar = Rect::default();
         hits.agent_sort_toggle = Rect::default();
         hits.agent_scope_toggle = Rect::default();
+        hits.agent_remotes_toggle = Rect::default();
         hits.new_workspace = Rect::default();
         hits.machines.clear();
         hits.workspaces.clear();

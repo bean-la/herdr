@@ -138,64 +138,67 @@ pub(super) fn render_agent_panel_header(
         crate::config::AgentPanelSortConfig::Priority => "priority",
     };
     let scope_label = agent_panel_scope_label(config.agent_panel_scope);
-    let separator = " · ";
-    let scope_width = display_width(scope_label).min(area.width as usize) as u16;
-    let separator_width = display_width(separator).min(area.width as usize) as u16;
-    let sort_width = display_width(sort_label).min(area.width as usize) as u16;
-    let total_width = sort_width
-        .saturating_add(separator_width)
-        .saturating_add(scope_width)
-        .min(area.width);
-    let right_edge = area.right();
-    let scope_rect = Rect::new(
-        right_edge.saturating_sub(scope_width),
-        header_y,
-        scope_width,
-        1,
-    );
-    let sort_rect = Rect::new(
-        right_edge.saturating_sub(total_width),
-        header_y,
-        sort_width,
-        1,
-    );
-    let separator_rect = Rect::new(
-        sort_rect.right(),
-        header_y,
-        separator_width.min(right_edge.saturating_sub(scope_rect.x)),
-        1,
-    );
+    let remotes_label = agent_panel_remotes_label(config.agent_panel_remotes);
+    let labels = [sort_label, scope_label, remotes_label];
+    let rects = right_aligned_toggle_rects(area, header_y, &labels);
     hits.agent_sort_toggle = if config.mouse_capture {
-        sort_rect
+        rects[0]
     } else {
         Rect::default()
     };
     hits.agent_scope_toggle = if config.mouse_capture {
-        scope_rect
+        rects[1]
+    } else {
+        Rect::default()
+    };
+    hits.agent_remotes_toggle = if config.mouse_capture {
+        rects[2]
     } else {
         Rect::default()
     };
     let toggle_style = Style::default()
         .fg(config.palette.overlay0)
         .add_modifier(Modifier::BOLD);
-    put_text(buffer, sort_rect.x, sort_rect.y, sort_rect.width, sort_label, toggle_style);
-    put_text(
-        buffer,
-        separator_rect.x,
-        separator_rect.y,
-        separator_rect.width,
-        separator,
-        Style::default().fg(config.palette.surface_dim),
-    );
-    put_text(
-        buffer,
-        scope_rect.x,
-        scope_rect.y,
-        scope_rect.width,
-        scope_label,
-        toggle_style,
-    );
+    let separator_style = Style::default().fg(config.palette.surface_dim);
+    for (index, (label, rect)) in labels.iter().zip(rects.iter()).enumerate() {
+        if index > 0 {
+            let previous = rects[index - 1];
+            let gap = rect.x.saturating_sub(previous.right());
+            if gap > 0 {
+                put_text(
+                    buffer,
+                    previous.right(),
+                    header_y,
+                    gap,
+                    " · ",
+                    separator_style,
+                );
+            }
+        }
+        put_text(buffer, rect.x, rect.y, rect.width, label, toggle_style);
+    }
     true
+}
+
+fn right_aligned_toggle_rects(area: Rect, y: u16, labels: &[&str]) -> Vec<Rect> {
+    let separator_width = display_width(" · ") as u16;
+    let widths = labels
+        .iter()
+        .map(|label| display_width(label).min(area.width as usize) as u16)
+        .collect::<Vec<_>>();
+    let mut total = widths.iter().copied().sum::<u16>();
+    if labels.len() > 1 {
+        total = total.saturating_add(separator_width.saturating_mul((labels.len() - 1) as u16));
+    }
+    let mut x = area.right().saturating_sub(total.min(area.width));
+    widths
+        .into_iter()
+        .map(|width| {
+            let rect = Rect::new(x.min(area.right()), y, width.min(area.right().saturating_sub(x)), 1);
+            x = x.saturating_add(width).saturating_add(separator_width);
+            rect
+        })
+        .collect()
 }
 
 fn agent_panel_scope_label(
@@ -204,6 +207,15 @@ fn agent_panel_scope_label(
     match scope {
         crate::config::AgentPanelScopeConfig::All => "all",
         crate::config::AgentPanelScopeConfig::ActiveWorkspace => "here",
+    }
+}
+
+fn agent_panel_remotes_label(
+    remotes: crate::config::AgentPanelRemotesConfig,
+) -> &'static str {
+    match remotes {
+        crate::config::AgentPanelRemotesConfig::Show => "remotes",
+        crate::config::AgentPanelRemotesConfig::Hide => "local",
     }
 }
 
@@ -586,6 +598,7 @@ fn remote_agent_rows<'a>(
         .remote_agents
         .iter()
         .filter(|_| snapshot.agent_view_label.is_none())
+        .filter(|_| config.agent_panel_remotes == crate::config::AgentPanelRemotesConfig::Show)
         .filter(|agent| agent.process_alive)
         .filter(|agent| {
             remote_presence_matches_scope(snapshot, agent.project.as_str(), config.agent_panel_scope)

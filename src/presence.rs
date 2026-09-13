@@ -82,9 +82,22 @@ impl PresenceRow {
     }
 }
 
-/// Derive a lane from an agent id (`host-project-lane` → lane; `host-lane` →
-/// lane). Mirrors the herm data-layer rule. Falls back to the raw id.
-pub fn derive_lane(agent_id: &str) -> String {
+/// Derive a lane from an agent id.
+///
+/// Prefer splitting on `-{project}-` so single-token hosts keep the nickname
+/// (`sebluair-herm-groovy-16be` → `groovy-16be`) and hyphenated hosts still
+/// work (`herm-b-slyce-perky-e9fb` → `perky-e9fb`). Falls back to the
+/// host-token heuristic, then the raw id.
+pub fn derive_lane(agent_id: &str, project: Option<&str>) -> String {
+    if let Some(project) = project.filter(|project| !project.is_empty()) {
+        let marker = format!("-{project}-");
+        if let Some(index) = agent_id.find(&marker) {
+            let rest = &agent_id[index + marker.len()..];
+            if !rest.is_empty() {
+                return rest.to_string();
+            }
+        }
+    }
     let parts: Vec<&str> = agent_id.split('-').collect();
     if parts.len() >= 4 {
         return parts[3..].join("-");
@@ -115,10 +128,16 @@ pub fn derive_user(project: Option<&str>, agent_id: &str) -> String {
 impl RemoteAgent {
     pub fn from_row(row: PresenceRow) -> Self {
         let project = row.project.clone().unwrap_or_else(|| "herm".to_string());
-        let lane = row
-            .lane
-            .clone()
-            .unwrap_or_else(|| derive_lane(&row.agent_id));
+        let derived = derive_lane(&row.agent_id, row.project.as_deref());
+        let lane = match row.lane.as_deref().filter(|lane| !lane.is_empty()) {
+            Some(api_lane)
+                if derived == api_lane || derived.ends_with(&format!("-{api_lane}")) =>
+            {
+                derived
+            }
+            Some(api_lane) => api_lane.to_string(),
+            None => derived,
+        };
         let status = row
             .effective_status
             .clone()
@@ -272,9 +291,36 @@ mod tests {
 
     #[test]
     fn derive_lane_and_user_match_canonical_rule() {
-        assert_eq!(derive_lane("herm-b-slyce-perky-e9fb"), "perky-e9fb");
-        assert_eq!(derive_lane("herm-b-herm-hackdaddy"), "hackdaddy");
-        assert_eq!(derive_lane("kooky-b9a3"), "b9a3");
+        assert_eq!(
+            derive_lane("herm-b-slyce-perky-e9fb", Some("slyce")),
+            "perky-e9fb"
+        );
+        assert_eq!(
+            derive_lane("herm-b-herm-hackdaddy", Some("herm")),
+            "hackdaddy"
+        );
+        assert_eq!(
+            derive_lane("sebluair-herm-groovy-16be", Some("herm")),
+            "groovy-16be"
+        );
+        assert_eq!(derive_lane("kooky-b9a3", None), "b9a3");
+        let from_suffix_only_api = RemoteAgent::from_row(PresenceRow {
+            agent_id: "sebluair-herm-groovy-16be".into(),
+            project: Some("herm".into()),
+            host: Some("sebluair".into()),
+            lane: Some("16be".into()),
+            cwd: None,
+            user: None,
+            effective_status: Some("idle".into()),
+            last_status: None,
+            process_alive: Some(true),
+            stream_alive: Some(true),
+            last_seen_ts: None,
+            lifecycle: Some("active".into()),
+            idle: Some(false),
+            session_memo: None,
+        });
+        assert_eq!(from_suffix_only_api.lane, "groovy-16be");
         assert_eq!(
             derive_user(Some("slyce"), "herm-b-slyce-perky-e9fb"),
             "slyce"
