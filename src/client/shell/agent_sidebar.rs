@@ -246,6 +246,11 @@ pub(super) fn agent_rows(
                 .agents
                 .iter()
                 .find(|agent| agent.pane_id == pane_id)?;
+            if config.agent_panel_scope == crate::config::AgentPanelScopeConfig::ActiveWorkspace
+                && Some(agent.workspace_id.as_str()) != snapshot.focused_workspace_id.as_deref()
+            {
+                return None;
+            }
             let workspace = snapshot
                 .workspaces
                 .iter()
