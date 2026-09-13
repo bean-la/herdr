@@ -115,12 +115,16 @@ jobs:
     needs: build-publish-linux
     runs-on: macos-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-apple-darwin
             asset: herdr-macos-x86_64
+            required: false
           - target: aarch64-apple-darwin
             asset: herdr-macos-aarch64
+            required: true
+    continue-on-error: ${{ matrix.required == false }}
     env:
       RUST_TOOLCHAIN_VERSION: 1.96.1
       LIBGHOSTTY_VT_OPTIMIZE: ReleaseSafe
@@ -212,12 +216,14 @@ jobs:
           test -f "$linux_dir/BUILD_INFO-linux.txt"
           test -f "$macos_arm_dir/herdr-macos-aarch64"
           test -f "$macos_arm_dir/BUILD_INFO.txt"
-          test -f "$macos_x86_dir/herdr-macos-x86_64"
-          test -f "$macos_x86_dir/BUILD_INFO.txt"
+          extra=()
+          if [[ -f "$macos_x86_dir/herdr-macos-x86_64" && -f "$macos_x86_dir/BUILD_INFO.txt" ]]; then
+            extra+=("$macos_x86_dir/herdr-macos-x86_64" "$macos_x86_dir/BUILD_INFO.txt")
+          fi
           gh release view brndr-latest --repo "$REPO" >/dev/null 2>&1 \
             || gh release create brndr-latest --repo "$REPO" --latest=false \
                  --title "brndr rolling builds" --notes "Rolling herdr fork builds for the settled commit."
           gh release upload brndr-latest --repo "$REPO" --clobber \
             "$linux_dir/herdr-linux-x86_64" "$linux_dir/BUILD_INFO-linux.txt" \
             "$macos_arm_dir/herdr-macos-aarch64" "$macos_arm_dir/BUILD_INFO.txt" \
-            "$macos_x86_dir/herdr-macos-x86_64" "$macos_x86_dir/BUILD_INFO.txt"
+            "${extra[@]}"
