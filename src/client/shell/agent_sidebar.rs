@@ -119,7 +119,7 @@ pub(super) fn render_agent_panel_header(
             .add_modifier(Modifier::BOLD),
     );
     let sort_label = agent_view_label.unwrap_or(match config.agent_panel_sort {
-        crate::config::AgentPanelSortConfig::Spaces => "grouped",
+        crate::config::AgentPanelSortConfig::Spaces => "grp",
         crate::config::AgentPanelSortConfig::Priority => "priority",
     });
     let sort_width = display_width(sort_label).min(area.width as usize) as u16;

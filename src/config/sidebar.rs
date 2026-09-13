@@ -446,8 +446,14 @@ impl Default for AgentsSidebarConfig {
                     AgentSidebarToken::Machine,
                     AgentSidebarToken::Workspace,
                     AgentSidebarToken::Tab,
+                    AgentSidebarToken::Agent,
                 ],
-                vec![AgentSidebarToken::Agent],
+                vec![
+                    AgentSidebarToken::Custom("context".into()),
+                    AgentSidebarToken::Custom("think".into()),
+                    AgentSidebarToken::Custom("mail".into()),
+                    AgentSidebarToken::Custom("last".into()),
+                ],
             ],
             rows_by_agent: BTreeMap::new(),
             row_gap: DEFAULT_SIDEBAR_ROW_GAP,
@@ -497,8 +503,14 @@ mod tests {
                     AgentSidebarToken::Machine,
                     AgentSidebarToken::Workspace,
                     AgentSidebarToken::Tab,
+                    AgentSidebarToken::Agent,
                 ],
-                vec![AgentSidebarToken::Agent],
+                vec![
+                    AgentSidebarToken::Custom("context".into()),
+                    AgentSidebarToken::Custom("think".into()),
+                    AgentSidebarToken::Custom("mail".into()),
+                    AgentSidebarToken::Custom("last".into()),
+                ],
             ]
         );
         assert!(config.agents.rows_by_agent.is_empty());
