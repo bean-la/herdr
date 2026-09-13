@@ -986,10 +986,16 @@ impl Workspace {
         pane_number: usize,
         extra_env: Vec<(String, String)>,
     ) -> PaneLaunchEnv {
-        PaneLaunchEnv::from_extra(extra_env).with_identity(
+        let tab_label = self
+            .tabs
+            .iter()
+            .position(|tab| tab.number == tab_number)
+            .and_then(|tab_idx| self.tab_display_name(tab_idx));
+        PaneLaunchEnv::from_extra(extra_env).with_identity_label(
             self.id.clone(),
             public_tab_id_for_number(&self.id, tab_number),
             public_pane_id_for_number(&self.id, pane_number),
+            tab_label,
         )
     }
 
