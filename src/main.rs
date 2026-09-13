@@ -573,7 +573,7 @@ fn main() -> io::Result<()> {
         return client::run_client();
     }
 
-    if args.get(1).map(|s| s.as_str()) == Some("update") {
+    if matches!(args.get(1).map(String::as_str), Some("update") | Some("upgrade")) {
         let options = match update::parse_self_update_args(&args[2..]) {
             Ok(options) => options,
             Err(err) if err.starts_with("usage:") => {
@@ -582,7 +582,7 @@ fn main() -> io::Result<()> {
             }
             Err(err) => {
                 eprintln!("{err}");
-                eprintln!("usage: herdr update [--handoff]");
+                eprintln!("usage: herdr upgrade [--handoff]");
                 std::process::exit(2);
             }
         };
