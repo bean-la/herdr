@@ -281,6 +281,16 @@ fn remote_presence_matches_scope(
     }
 }
 
+fn live_presence_covers_lane(
+    snapshot: &ClientShellSnapshot,
+    project: &str,
+    lane: &str,
+) -> bool {
+    snapshot.remote_agents.iter().any(|agent| {
+        agent.process_alive && agent.project == project && agent.lane == lane
+    })
+}
+
 /// True when this server already has a workspace tab named for the lane.
 /// Fleet lanes on the VPS should render as local tab rows, not presence rows.
 fn workspace_has_lane_tab(
@@ -367,6 +377,9 @@ fn lane_tab_agent_rows(
                 continue;
             };
             if covered_panes.contains(pane.pane_id.as_str()) {
+                continue;
+            }
+            if !live_presence_covers_lane(snapshot, workspace.label.as_str(), tab.label.as_str()) {
                 continue;
             }
             let tab_label = (tab_count > 1 || tab.custom_label)
@@ -573,6 +586,7 @@ fn remote_agent_rows<'a>(
         .remote_agents
         .iter()
         .filter(|_| snapshot.agent_view_label.is_none())
+        .filter(|agent| agent.process_alive)
         .filter(|agent| {
             remote_presence_matches_scope(snapshot, agent.project.as_str(), config.agent_panel_scope)
         })

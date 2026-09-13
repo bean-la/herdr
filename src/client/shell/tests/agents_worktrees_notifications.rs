@@ -1715,11 +1715,11 @@ fn lane_tab_fallback_rows_show_workspace_tabs_without_detected_agents() {
         .join("\n");
     assert!(
         text.contains("goaldaddy"),
-        "lane tabs should render as local sidebar rows: {text}"
+        "a live lane with matching presence should render as a local sidebar row: {text}"
     );
     assert!(
-        text.contains("taskdaddy"),
-        "all lane tabs in the workspace should render: {text}"
+        !text.contains("taskdaddy"),
+        "empty restored tabs without a live agent should stay out of the sidebar: {text}"
     );
     assert!(
         !text.contains("remote"),
