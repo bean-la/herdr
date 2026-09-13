@@ -3332,6 +3332,7 @@ impl HeadlessServer {
 
         if self.has_app_client() {
             self.app.start_git_status_refresh_if_due(now);
+            self.app.start_presence_refresh_if_due(now);
         }
 
         if self

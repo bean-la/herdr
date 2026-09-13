@@ -113,6 +113,7 @@ enum PaneLaunchIdentity {
         workspace_id: String,
         tab_id: String,
         pane_id: String,
+        tab_label: Option<String>,
     },
     OmitPane,
 }
@@ -126,15 +127,26 @@ impl PaneLaunchEnv {
     }
 
     pub(crate) fn with_identity(
+        self,
+        workspace_id: String,
+        tab_id: String,
+        pane_id: String,
+    ) -> Self {
+        self.with_identity_label(workspace_id, tab_id, pane_id, None)
+    }
+
+    pub(crate) fn with_identity_label(
         mut self,
         workspace_id: String,
         tab_id: String,
         pane_id: String,
+        tab_label: Option<String>,
     ) -> Self {
         self.identity = PaneLaunchIdentity::Managed {
             workspace_id,
             tab_id,
             pane_id,
+            tab_label,
         };
         self
     }
@@ -162,10 +174,15 @@ fn apply_pane_launch_env(cmd: &mut CommandBuilder, launch_env: &PaneLaunchEnv) {
             workspace_id,
             tab_id,
             pane_id,
+            tab_label,
         } => {
             cmd.env(crate::integration::HERDR_WORKSPACE_ID_ENV_VAR, workspace_id);
             cmd.env(crate::integration::HERDR_TAB_ID_ENV_VAR, tab_id);
             cmd.env(crate::integration::HERDR_PANE_ID_ENV_VAR, pane_id);
+            if let Some(label) = tab_label.as_deref().filter(|label| !label.is_empty()) {
+                cmd.env(crate::integration::HERM_TAB_LABEL_ENV_VAR, label);
+                cmd.env(crate::integration::HERDR_TAB_LABEL_ENV_VAR, label);
+            }
         }
         PaneLaunchIdentity::OmitPane => {
             cmd.env_remove(crate::integration::HERDR_PANE_ID_ENV_VAR);
@@ -3568,6 +3585,32 @@ mod tests {
         apply_pane_launch_env(&mut cmd, &PaneLaunchEnv::default());
 
         assert!(cmd.get_env("OMPCODE").is_none());
+    }
+
+    #[test]
+    fn pane_launch_env_exports_tab_label_for_lane_identity() {
+        let mut cmd = CommandBuilder::new("shell");
+        let launch_env = PaneLaunchEnv::from_extra(Vec::new()).with_identity_label(
+            "w44".into(),
+            "w44:t1".into(),
+            "w44:p1".into(),
+            Some("goaldaddy".into()),
+        );
+
+        apply_pane_launch_env(&mut cmd, &launch_env);
+
+        assert_eq!(
+            cmd.get_env("HERDR_TAB_ID").and_then(|v| v.to_str()),
+            Some("w44:t1")
+        );
+        assert_eq!(
+            cmd.get_env("HERM_TAB_LABEL").and_then(|v| v.to_str()),
+            Some("goaldaddy")
+        );
+        assert_eq!(
+            cmd.get_env("HERDR_TAB_LABEL").and_then(|v| v.to_str()),
+            Some("goaldaddy")
+        );
     }
 
     #[test]

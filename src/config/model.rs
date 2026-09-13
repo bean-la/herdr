@@ -106,7 +106,16 @@ pub enum AgentPanelSortConfig {
 pub enum AgentPanelScopeConfig {
     #[default]
     All,
+    #[serde(alias = "current")]
     ActiveWorkspace,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentPanelRemotesConfig {
+    #[default]
+    Show,
+    Hide,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
@@ -960,6 +969,8 @@ pub struct UiConfig {
     pub agent_panel_sort: AgentPanelSortConfig,
     /// Scope of agent sidebar rows. Default: all.
     pub agent_panel_scope: AgentPanelScopeConfig,
+    /// Whether presence/remote rows appear in the agent sidebar. Default: show.
+    pub agent_panel_remotes: AgentPanelRemotesConfig,
     /// Agent status indicator style. Saved values are "dots" or "symbols". Default: "dots".
     pub status_indicators: StatusIndicatorStyle,
     /// Expanded sidebar row composition.
@@ -1185,6 +1196,7 @@ impl Default for UiConfig {
             window_title: super::window_title::default_window_title(),
             agent_panel_sort: AgentPanelSortConfig::Spaces,
             agent_panel_scope: AgentPanelScopeConfig::default(),
+            agent_panel_remotes: AgentPanelRemotesConfig::default(),
             status_indicators: StatusIndicatorStyle::Dots,
             sidebar: SidebarConfig::default(),
             accent: "cyan".into(),

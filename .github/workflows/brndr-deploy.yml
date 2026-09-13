@@ -13,7 +13,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'scripts/macos-split-linker.sh'
-      - '.github/workflows/brndr-deploy.yml'
+  # Workflow-only edits do not auto-trigger release builds; use workflow_dispatch.
   workflow_dispatch:
 
 # Last push wins — installs are fast and idempotent, so cancelling an older
@@ -21,6 +21,9 @@ on:
 concurrency:
   group: brndr-deploy
   cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-publish-linux:
@@ -52,7 +55,7 @@ jobs:
           version: 0.16.0
 
       - name: Cache Rust and Zig build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
             ~/.cargo/registry
@@ -82,20 +85,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="brndr-${GITHUB_SHA}"
-          gh release create "$tag" --repo bean-la/herdr --target "$GITHUB_SHA" \
-            --title "$tag" --notes "Immutable brndr build for ${GITHUB_SHA}." \
-            herdr-linux-x86_64 BUILD_INFO-linux.txt
+          if gh release view "$tag" --repo bean-la/herdr >/dev/null 2>&1; then
+            echo "Release $tag already exists; skipping immutable release creation"
+          else
+            gh release create "$tag" --repo bean-la/herdr --target "$GITHUB_SHA" \
+              --title "$tag" --notes "Immutable brndr build for ${GITHUB_SHA}." \
+              herdr-linux-x86_64 BUILD_INFO-linux.txt
+          fi
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: herdr-linux-x86_64
+          path: |
+            herdr-linux-x86_64
+            BUILD_INFO-linux.txt
+          retention-days: 14
 
   # macOS build for the laptop, from the SAME settled commit as the herm-b
   # linux build — so brndr --remote's version-match check passes against
   # herm-b and the laptop brndr-bin stays in lockstep. Fleet laptops are
-  # Apple Silicon only, so just aarch64 (no x86_64 mac build). Published to
-  # a rolling `brndr-latest` release (--latest=false keeps semantic releases
-  # as GitHub's "latest"); the laptop fetches herdr-macos-aarch64 from there.
-  # Steps mirror build-artifacts-manual.yml's build-macos job (same pinned
-  # toolchain), with the patched brew zig (see Install step).
+  # Apple Silicon; GitHub macos-latest is ARM and cannot cross-compile
+  # x86_64-apple-darwin with the current zig/ghostty toolchain.
+  # Publish the aarch64 macOS build to the rolling `brndr-latest` release
+  # (--latest=false keeps semantic releases as GitHub's "latest").
   build-macos:
     name: Build macOS (brndr-latest release)
+    needs: build-publish-linux
     runs-on: macos-latest
     env:
       RUST_TOOLCHAIN_VERSION: 1.96.1
@@ -119,7 +135,7 @@ jobs:
           version: 0.16.0
 
       - name: Cache Rust and Zig build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
             ~/.cargo/registry
@@ -138,6 +154,7 @@ jobs:
         # rejects — split linker routes exe links to zig (lld, tolerant) and
         # proc-macro dylib links to Apple cc (see scripts/macos-split-linker.sh).
         env:
+          CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER: ${{ github.workspace }}/scripts/macos-split-linker.sh
           CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER: ${{ github.workspace }}/scripts/macos-split-linker.sh
         run: HERDR_BUILD_ID="${GITHUB_SHA:0:8}" cargo build --release --locked --target aarch64-apple-darwin
 
@@ -158,15 +175,6 @@ jobs:
           python3 -c "import hashlib, pathlib; artifact = pathlib.Path('herdr-macos-aarch64'); print(f'sha256={hashlib.sha256(artifact.read_bytes()).hexdigest()}  {artifact.name}')" >> BUILD_INFO.txt
 
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: herdr-macos-aarch64
-          path: |
-            herdr-macos-aarch64
-            BUILD_INFO.txt
-          retention-days: 14
-
-      - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: herdr-macos-aarch64
@@ -183,20 +191,21 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: Publish immutable and rolling artifacts
+      - name: Publish rolling brndr-latest release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           REPO=bean-la/herdr
-          tag="brndr-${GITHUB_SHA}"
-          gh release create "$tag" --repo "$REPO" --target "$GITHUB_SHA" \
-            --title "$tag" --notes "Immutable brndr build for ${GITHUB_SHA}." \
-            artifacts/herdr-linux-x86_64/herdr-linux-x86_64 artifacts/herdr-linux-x86_64/BUILD_INFO-linux.txt \
-            artifacts/herdr-macos-aarch64/herdr-macos-aarch64 artifacts/herdr-macos-aarch64/BUILD_INFO.txt
+          linux_dir="artifacts/herdr-linux-x86_64"
+          macos_arm_dir="artifacts/herdr-macos-aarch64"
+          test -f "$linux_dir/herdr-linux-x86_64"
+          test -f "$linux_dir/BUILD_INFO-linux.txt"
+          test -f "$macos_arm_dir/herdr-macos-aarch64"
+          test -f "$macos_arm_dir/BUILD_INFO.txt"
           gh release view brndr-latest --repo "$REPO" >/dev/null 2>&1 \
             || gh release create brndr-latest --repo "$REPO" --latest=false \
                  --title "brndr rolling builds" --notes "Rolling herdr fork builds for the settled commit."
           gh release upload brndr-latest --repo "$REPO" --clobber \
-            artifacts/herdr-linux-x86_64/herdr-linux-x86_64 artifacts/herdr-linux-x86_64/BUILD_INFO-linux.txt \
-            artifacts/herdr-macos-aarch64/herdr-macos-aarch64 artifacts/herdr-macos-aarch64/BUILD_INFO.txt
+            "$linux_dir/herdr-linux-x86_64" "$linux_dir/BUILD_INFO-linux.txt" \
+            "$macos_arm_dir/herdr-macos-aarch64" "$macos_arm_dir/BUILD_INFO.txt"

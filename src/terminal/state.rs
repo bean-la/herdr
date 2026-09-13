@@ -1842,6 +1842,28 @@ impl TerminalState {
                     .then(|| self.detected_agent.map(crate::detect::agent_label))
                     .flatten()
             })
+            .or_else(|| self.session_sidebar_agent_label())
+    }
+
+    fn session_sidebar_agent_label(&self) -> Option<&str> {
+        if self.recent_agent_process_exit.is_some() {
+            return None;
+        }
+        let session = self.persisted_agent_session.as_ref()?;
+        if !crate::detect::session_sidebar_agent_identity(&session.source, &session.agent) {
+            return None;
+        }
+        let known = crate::detect::parse_agent_label(&session.agent)?;
+        if self
+            .detected_agent
+            .is_some_and(|detected| detected != known)
+            || self.detected_agent.is_some()
+        {
+            return None;
+        }
+        self.terminal_title_stripped()
+            .is_some_and(|title| title.contains("Cursor Agent"))
+            .then_some(session.agent.as_str())
     }
 
     pub fn effective_known_agent(&self) -> Option<Agent> {
@@ -2348,6 +2370,47 @@ mod tests {
         };
 
         assert_eq!(stabilize_agent_detection(detection), AgentState::Idle);
+    }
+
+    #[test]
+    fn cursor_session_and_title_establish_sidebar_label_without_process_detection() {
+        let mut terminal = test_terminal();
+        terminal.set_terminal_title(Some("Cursor Agent".into()));
+        let session_ref =
+            crate::agent_resume::AgentSessionRef::id("cursor-session").unwrap();
+        terminal
+            .set_agent_session_ref_for_session_start(
+                "herdr:cursor".into(),
+                "cursor".into(),
+                Some(session_ref),
+                Some(1),
+                Some("startup".into()),
+            )
+            .expect("cursor session should be accepted");
+
+        assert_eq!(terminal.detected_agent, None);
+        assert_eq!(terminal.effective_agent_label(), Some("cursor"));
+        assert!(terminal.is_agent_terminal());
+    }
+
+    #[test]
+    fn cursor_session_without_active_title_does_not_establish_sidebar_label() {
+        let mut terminal = test_terminal();
+        terminal.set_terminal_title(Some("slyce meta".into()));
+        let session_ref =
+            crate::agent_resume::AgentSessionRef::id("cursor-session").unwrap();
+        terminal
+            .set_agent_session_ref_for_session_start(
+                "herdr:cursor".into(),
+                "cursor".into(),
+                Some(session_ref),
+                Some(1),
+                Some("startup".into()),
+            )
+            .expect("cursor session should be accepted");
+
+        assert_eq!(terminal.effective_agent_label(), None);
+        assert!(!terminal.is_agent_terminal());
     }
 
     #[test]

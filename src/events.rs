@@ -173,4 +173,8 @@ pub enum AppEvent {
     WorktreeAddFinished(Box<WorktreeAddResult>),
     /// Background `git worktree remove` completed.
     WorktreeRemoveFinished(Box<WorktreeRemoveResult>),
+    /// Background herm-core presence refresh completed.
+    PresenceRefreshed {
+        result: Result<Vec<crate::presence::RemoteAgent>, String>,
+    },
 }

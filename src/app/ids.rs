@@ -48,11 +48,13 @@ impl App {
         let tab_idx = ws.find_tab_index_for_pane(pane_id)?;
         let tab_id = self.public_tab_id(ws_idx, tab_idx)?;
         let pane_id = self.public_pane_id(ws_idx, pane_id)?;
+        let tab_label = ws.tab_display_name(tab_idx);
         Some(
-            crate::pane::PaneLaunchEnv::from_extra(extra_env).with_identity(
+            crate::pane::PaneLaunchEnv::from_extra(extra_env).with_identity_label(
                 workspace_id,
                 tab_id,
                 pane_id,
+                tab_label,
             ),
         )
     }

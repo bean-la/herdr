@@ -81,8 +81,10 @@ pub(super) fn render_expanded(
                         .add_modifier(Modifier::DIM),
                 );
             }
-            hits.endpoint_agents
-                .push((rect, row.endpoint_id.clone(), row.agent.pane_id.clone()));
+            if !row.agent.remote {
+                hits.endpoint_agents
+                    .push((rect, row.endpoint_id.clone(), row.agent.pane_id.clone()));
+            }
         },
     );
 }

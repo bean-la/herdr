@@ -1981,6 +1981,38 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
+                if super::contains(self.hits.agent_scope_toggle, point) {
+                    let scope = match self.config.agent_panel_scope {
+                        crate::config::AgentPanelScopeConfig::All => {
+                            crate::config::AgentPanelScopeConfig::ActiveWorkspace
+                        }
+                        crate::config::AgentPanelScopeConfig::ActiveWorkspace => {
+                            crate::config::AgentPanelScopeConfig::All
+                        }
+                    };
+                    self.config.agent_panel_scope = scope;
+                    self.agent_panel_scope_manual = true;
+                    self.agent_scroll = 0;
+                    self.persist_chrome_preferences(outcome);
+                    outcome.repaint = true;
+                    return;
+                }
+                if super::contains(self.hits.agent_remotes_toggle, point) {
+                    let remotes = match self.config.agent_panel_remotes {
+                        crate::config::AgentPanelRemotesConfig::Show => {
+                            crate::config::AgentPanelRemotesConfig::Hide
+                        }
+                        crate::config::AgentPanelRemotesConfig::Hide => {
+                            crate::config::AgentPanelRemotesConfig::Show
+                        }
+                    };
+                    self.config.agent_panel_remotes = remotes;
+                    self.agent_panel_remotes_manual = true;
+                    self.agent_scroll = 0;
+                    self.persist_chrome_preferences(outcome);
+                    outcome.repaint = true;
+                    return;
+                }
                 if self.handle_endpoint_machine_click(point, outcome) {
                     return;
                 }

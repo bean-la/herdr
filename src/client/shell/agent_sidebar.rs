@@ -14,6 +14,7 @@ pub(super) struct AgentRow {
     pub(super) pane_id: String,
     pub(super) status: crate::api::schema::AgentStatus,
     pub(super) focused: bool,
+    pub(super) remote: bool,
     pub(super) rows: Vec<Vec<crate::ui::ResolvedToken>>,
 }
 
@@ -81,7 +82,9 @@ pub(super) fn render_agent_panel(
         hits,
         |row| row.rows.len(),
         |buffer, rect, row, hits| {
-            hits.agents.push((rect, row.pane_id.clone()));
+            if !row.remote {
+                hits.agents.push((rect, row.pane_id.clone()));
+            }
             render_agent_row(buffer, rect, row, config);
         },
     );
@@ -108,47 +111,302 @@ pub(super) fn render_agent_panel_header(
     if area.height < 2 {
         return false;
     }
-    put_text(
-        buffer,
-        area.x,
-        area.y + 1,
-        area.width,
-        " agents",
-        Style::default()
-            .fg(config.palette.overlay0)
-            .add_modifier(Modifier::BOLD),
-    );
-    let sort_label = agent_view_label.unwrap_or(match config.agent_panel_sort {
+    let header_y = area.y + 1;
+    if let Some(label) = agent_view_label {
+        let label_width = display_width(label).min(area.width as usize) as u16;
+        let label_rect = Rect::new(area.right().saturating_sub(label_width), header_y, label_width, 1);
+        put_text(buffer, label_rect.x, label_rect.y, label_rect.width, label, Style::default().fg(config.palette.accent).add_modifier(Modifier::BOLD));
+        return true;
+    }
+
+    let sort_label = match config.agent_panel_sort {
         crate::config::AgentPanelSortConfig::Spaces => "grp",
         crate::config::AgentPanelSortConfig::Priority => "priority",
-    });
-    let sort_width = display_width(sort_label).min(area.width as usize) as u16;
-    let sort_rect = Rect::new(
-        area.right().saturating_sub(sort_width),
-        area.y + 1,
-        sort_width,
-        1,
-    );
-    hits.agent_sort_toggle = if config.mouse_capture && agent_view_label.is_none() {
-        sort_rect
+    };
+    let scope_label = agent_panel_scope_label(config.agent_panel_scope);
+    let remotes_label = agent_panel_remotes_label(config.agent_panel_remotes);
+    let labels = [sort_label, scope_label, remotes_label];
+    let rects = right_aligned_toggle_rects(area, header_y, &labels);
+    hits.agent_sort_toggle = if config.mouse_capture {
+        rects[0]
     } else {
         Rect::default()
     };
-    put_text(
-        buffer,
-        sort_rect.x,
-        sort_rect.y,
-        sort_rect.width,
-        sort_label,
-        Style::default()
-            .fg(if agent_view_label.is_some() {
-                config.palette.accent
-            } else {
-                config.palette.overlay0
-            })
-            .add_modifier(Modifier::BOLD),
-    );
+    hits.agent_scope_toggle = if config.mouse_capture {
+        rects[1]
+    } else {
+        Rect::default()
+    };
+    hits.agent_remotes_toggle = if config.mouse_capture {
+        rects[2]
+    } else {
+        Rect::default()
+    };
+    let toggle_style = Style::default()
+        .fg(config.palette.overlay0)
+        .add_modifier(Modifier::BOLD);
+    let separator_style = Style::default().fg(config.palette.surface_dim);
+    for (index, (label, rect)) in labels.iter().zip(rects.iter()).enumerate() {
+        if index > 0 {
+            let previous = rects[index - 1];
+            let gap = rect.x.saturating_sub(previous.right());
+            if gap > 0 {
+                put_text(
+                    buffer,
+                    previous.right(),
+                    header_y,
+                    gap,
+                    " · ",
+                    separator_style,
+                );
+            }
+        }
+        put_text(buffer, rect.x, rect.y, rect.width, label, toggle_style);
+    }
     true
+}
+
+fn right_aligned_toggle_rects(area: Rect, y: u16, labels: &[&str]) -> Vec<Rect> {
+    let separator_width = display_width(" · ") as u16;
+    let widths = labels
+        .iter()
+        .map(|label| display_width(label).min(area.width as usize) as u16)
+        .collect::<Vec<_>>();
+    let mut total = widths.iter().copied().sum::<u16>();
+    if labels.len() > 1 {
+        total = total.saturating_add(separator_width.saturating_mul((labels.len() - 1) as u16));
+    }
+    let mut x = area.right().saturating_sub(total.min(area.width));
+    widths
+        .into_iter()
+        .map(|width| {
+            let rect = Rect::new(x.min(area.right()), y, width.min(area.right().saturating_sub(x)), 1);
+            x = x.saturating_add(width).saturating_add(separator_width);
+            rect
+        })
+        .collect()
+}
+
+fn agent_panel_scope_label(
+    scope: crate::config::AgentPanelScopeConfig,
+) -> &'static str {
+    match scope {
+        crate::config::AgentPanelScopeConfig::All => "all",
+        crate::config::AgentPanelScopeConfig::ActiveWorkspace => "here",
+    }
+}
+
+fn agent_panel_remotes_label(
+    remotes: crate::config::AgentPanelRemotesConfig,
+) -> &'static str {
+    match remotes {
+        crate::config::AgentPanelRemotesConfig::Show => "remotes",
+        crate::config::AgentPanelRemotesConfig::Hide => "local",
+    }
+}
+
+/// Workspace used by the "here" agent-panel scope.
+///
+/// Per-client shell location can lag behind the focused pane on multi-client VPS
+/// hosts, so fall back to the focused agent/pane workspace before filtering.
+fn effective_scope_workspace_id(snapshot: &ClientShellSnapshot) -> Option<&str> {
+    snapshot
+        .focused_workspace_id
+        .as_deref()
+        .or_else(|| {
+            snapshot
+                .agents
+                .iter()
+                .find(|agent| agent.focused)
+                .map(|agent| agent.workspace_id.as_str())
+        })
+        .or_else(|| {
+            snapshot
+                .focused_pane_id
+                .as_deref()
+                .and_then(|pane_id| {
+                    snapshot
+                        .panes
+                        .iter()
+                        .find(|pane| pane.pane_id == pane_id)
+                        .map(|pane| pane.workspace_id.as_str())
+                })
+        })
+        .or_else(|| {
+            snapshot
+                .workspaces
+                .iter()
+                .find(|workspace| workspace.focused)
+                .map(|workspace| workspace.workspace_id.as_str())
+        })
+}
+
+fn effective_scope_workspace_label(snapshot: &ClientShellSnapshot) -> Option<&str> {
+    effective_scope_workspace_id(snapshot).and_then(|workspace_id| {
+        snapshot
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.workspace_id == workspace_id)
+            .map(|workspace| workspace.label.as_str())
+    })
+}
+
+fn agent_matches_scope(
+    snapshot: &ClientShellSnapshot,
+    agent_workspace_id: &str,
+    scope: crate::config::AgentPanelScopeConfig,
+) -> bool {
+    if scope == crate::config::AgentPanelScopeConfig::All {
+        return true;
+    }
+    match effective_scope_workspace_id(snapshot) {
+        Some(workspace_id) => agent_workspace_id == workspace_id,
+        None => true,
+    }
+}
+
+fn remote_presence_matches_scope(
+    snapshot: &ClientShellSnapshot,
+    project: &str,
+    scope: crate::config::AgentPanelScopeConfig,
+) -> bool {
+    if scope == crate::config::AgentPanelScopeConfig::All {
+        return true;
+    }
+    match effective_scope_workspace_label(snapshot) {
+        Some(label) => project == label,
+        None => true,
+    }
+}
+
+fn live_presence_covers_lane(
+    snapshot: &ClientShellSnapshot,
+    project: &str,
+    lane: &str,
+) -> bool {
+    snapshot.remote_agents.iter().any(|agent| {
+        agent.process_alive && agent.project == project && agent.lane == lane
+    })
+}
+
+/// True when this server already has a workspace tab named for the lane.
+/// Fleet lanes on the VPS should render as local tab rows, not presence rows.
+fn workspace_has_lane_tab(
+    snapshot: &ClientShellSnapshot,
+    project: &str,
+    lane: &str,
+) -> bool {
+    snapshot
+        .workspaces
+        .iter()
+        .filter(|workspace| workspace.label == project)
+        .flat_map(|workspace| {
+            snapshot
+                .tabs
+                .iter()
+                .filter(|tab| tab.workspace_id == workspace.workspace_id)
+        })
+        .any(|tab| tab.label == lane)
+}
+
+fn presence_host(agent_id: &str, project: &str, lane: &str) -> String {
+    let suffix = format!("-{project}-{lane}");
+    if let Some(host) = agent_id.strip_suffix(&suffix) {
+        if !host.is_empty() {
+            return host.to_string();
+        }
+    }
+    agent_id
+        .split('-')
+        .next()
+        .filter(|part| !part.is_empty())
+        .unwrap_or("remote")
+        .to_string()
+}
+
+fn primary_pane_for_tab<'a>(
+    snapshot: &'a ClientShellSnapshot,
+    workspace_id: &str,
+    tab_id: &str,
+) -> Option<&'a crate::protocol::ClientShellPane> {
+    let panes = snapshot
+        .panes
+        .iter()
+        .filter(|pane| pane.workspace_id == workspace_id && pane.tab_id == tab_id)
+        .collect::<Vec<_>>();
+    panes
+        .iter()
+        .find(|pane| pane.focused)
+        .or_else(|| panes.first())
+        .copied()
+}
+
+fn lane_tab_agent_rows(
+    snapshot: &ClientShellSnapshot,
+    config: &ClientShellConfig,
+) -> Vec<AgentRow> {
+    if snapshot.agent_view_label.is_some() {
+        return Vec::new();
+    }
+    let covered_panes = snapshot
+        .agents
+        .iter()
+        .map(|agent| agent.pane_id.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    let mut rows = Vec::new();
+    for workspace in &snapshot.workspaces {
+        if !agent_matches_scope(
+            snapshot,
+            workspace.workspace_id.as_str(),
+            config.agent_panel_scope,
+        ) {
+            continue;
+        }
+        let mut tabs = snapshot
+            .tabs
+            .iter()
+            .filter(|tab| tab.workspace_id == workspace.workspace_id)
+            .collect::<Vec<_>>();
+        tabs.sort_by_key(|tab| tab.number);
+        let tab_count = tabs.len();
+        for tab in tabs {
+            let Some(pane) = primary_pane_for_tab(snapshot, &workspace.workspace_id, &tab.tab_id)
+            else {
+                continue;
+            };
+            if covered_panes.contains(pane.pane_id.as_str()) {
+                continue;
+            }
+            if !live_presence_covers_lane(snapshot, workspace.label.as_str(), tab.label.as_str()) {
+                continue;
+            }
+            let tab_label = (tab_count > 1 || tab.custom_label)
+                .then_some(tab.label.as_str());
+            let ui_rows = crate::ui::sidebar_agent_rows(
+                &config.agents,
+                crate::ui::AgentTokenContext {
+                    machine: None,
+                    workspace: &workspace.label,
+                    tab: tab_label,
+                    pane: pane.label.as_deref(),
+                    agent_label: Some(tab.label.as_str()),
+                    terminal_title: None,
+                    terminal_title_stripped: None,
+                    canonical_agent: None,
+                    tokens: &HashMap::new(),
+                },
+                sidebar_status_text(crate::api::schema::AgentStatus::Idle),
+            );
+            rows.push(AgentRow {
+                pane_id: pane.pane_id.clone(),
+                status: crate::api::schema::AgentStatus::Idle,
+                focused: pane.focused,
+                remote: false,
+                rows: ui_rows,
+            });
+        }
+    }
+    rows
 }
 
 pub(super) fn render_agent_list<T>(
@@ -246,8 +504,7 @@ pub(super) fn agent_rows(
                 .agents
                 .iter()
                 .find(|agent| agent.pane_id == pane_id)?;
-            if config.agent_panel_scope == crate::config::AgentPanelScopeConfig::ActiveWorkspace
-                && Some(agent.workspace_id.as_str()) != snapshot.focused_workspace_id.as_deref()
+            if !agent_matches_scope(snapshot, agent.workspace_id.as_str(), config.agent_panel_scope)
             {
                 return None;
             }
@@ -310,10 +567,73 @@ pub(super) fn agent_rows(
                 pane_id: agent.pane_id.clone(),
                 status: agent.agent_status,
                 focused: agent.focused,
+                remote: false,
                 rows,
             })
         })
+        .chain(lane_tab_agent_rows(snapshot, config))
+        .chain(remote_agent_rows(snapshot, config))
         .collect()
+}
+
+fn remote_agent_rows<'a>(
+    snapshot: &'a ClientShellSnapshot,
+    config: &'a ClientShellConfig,
+) -> impl Iterator<Item = AgentRow> + 'a {
+    snapshot
+        .remote_agents
+        .iter()
+        .filter(|_| snapshot.agent_view_label.is_none())
+        .filter(|_| config.agent_panel_remotes == crate::config::AgentPanelRemotesConfig::Show)
+        .filter(|agent| agent.process_alive)
+        .filter(|agent| {
+            remote_presence_matches_scope(snapshot, agent.project.as_str(), config.agent_panel_scope)
+        })
+        .filter(|agent| {
+            !workspace_has_lane_tab(snapshot, agent.project.as_str(), agent.lane.as_str())
+        })
+        .map(|agent| {
+            let status = remote_agent_status(&agent.status);
+            let label = format!("{} · {}", agent.project, agent.lane);
+            let host = presence_host(&agent.agent_id, &agent.project, &agent.lane);
+            let tokens = agent
+                .session_memo
+                .as_ref()
+                .filter(|memo| !memo.is_empty())
+                .map(|memo| HashMap::from([("session_memo".to_string(), memo.clone())]))
+                .unwrap_or_default();
+            let rows = crate::ui::sidebar_agent_rows(
+                &config.agents,
+                crate::ui::AgentTokenContext {
+                    machine: Some(host.as_str()),
+                    workspace: &agent.project,
+                    tab: Some(agent.lane.as_str()),
+                    pane: None,
+                    agent_label: Some(label.as_str()),
+                    terminal_title: None,
+                    terminal_title_stripped: None,
+                    canonical_agent: None,
+                    tokens: &tokens,
+                },
+                sidebar_status_text(status),
+            );
+            AgentRow {
+                pane_id: format!("remote:{}", agent.agent_id),
+                status,
+                focused: false,
+                remote: true,
+                rows,
+            }
+        })
+}
+
+fn remote_agent_status(status: &str) -> crate::api::schema::AgentStatus {
+    match status {
+        "working" => crate::api::schema::AgentStatus::Working,
+        "blocked" => crate::api::schema::AgentStatus::Blocked,
+        "done" => crate::api::schema::AgentStatus::Done,
+        _ => crate::api::schema::AgentStatus::Idle,
+    }
 }
 
 pub(super) fn render_agent_row(
@@ -328,14 +648,19 @@ pub(super) fn render_agent_row(
     } else {
         Style::default()
     };
+    let remote_modifier = if row.remote {
+        Modifier::DIM | Modifier::ITALIC
+    } else {
+        Modifier::empty()
+    };
     let name_style = if row.focused {
         Style::default()
             .fg(palette.text)
-            .add_modifier(Modifier::BOLD)
+            .add_modifier(Modifier::BOLD | remote_modifier)
     } else {
         Style::default()
             .fg(palette.subtext0)
-            .add_modifier(Modifier::BOLD)
+            .add_modifier(Modifier::BOLD | remote_modifier)
     };
     let status_style = Style::default()
         .fg(status_color(row.status, palette))

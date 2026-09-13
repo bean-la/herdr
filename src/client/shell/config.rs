@@ -59,6 +59,12 @@ impl ClientShellState {
             agent_panel_sort: self
                 .agent_panel_sort_manual
                 .then_some(self.config.agent_panel_sort),
+            agent_panel_scope: self
+                .agent_panel_scope_manual
+                .then_some(self.config.agent_panel_scope),
+            agent_panel_remotes: self
+                .agent_panel_remotes_manual
+                .then_some(self.config.agent_panel_remotes),
             collapsed_groups,
             remote_collapsed_groups,
         };
@@ -72,6 +78,8 @@ impl ClientShellState {
         match crate::config::load_live_config() {
             Ok(loaded) => {
                 let agent_panel_sort = self.config.agent_panel_sort;
+                let agent_panel_scope = self.config.agent_panel_scope;
+                let agent_panel_remotes = self.config.agent_panel_remotes;
                 let diagnostics = self.config.apply_live_config(
                     &loaded.config,
                     &loaded.diagnostics,
@@ -88,6 +96,12 @@ impl ClientShellState {
                 }
                 if self.agent_panel_sort_manual {
                     self.config.agent_panel_sort = agent_panel_sort;
+                }
+                if self.agent_panel_scope_manual {
+                    self.config.agent_panel_scope = agent_panel_scope;
+                }
+                if self.agent_panel_remotes_manual {
+                    self.config.agent_panel_remotes = agent_panel_remotes;
                 }
                 self.set_local_config_diagnostic(self.config.local_config_diagnostic(&diagnostics));
                 if let Some(snapshot) = self.snapshot.as_deref() {
@@ -125,6 +139,7 @@ impl ClientShellConfig {
             agents: config.ui.sidebar.agents.clone(),
             agent_panel_sort: config.ui.agent_panel_sort,
             agent_panel_scope: config.ui.agent_panel_scope,
+            agent_panel_remotes: config.ui.agent_panel_remotes,
             status_indicators: config.ui.status_indicators,
             sound_enabled: config.ui.sound.enabled,
             toast_delivery: config.ui.toast.delivery,
@@ -327,6 +342,8 @@ impl ClientShellConfig {
                 self.spaces = ui.sidebar.spaces.clone();
                 self.agents = ui.sidebar.agents.clone();
                 self.agent_panel_sort = ui.agent_panel_sort;
+                self.agent_panel_scope = ui.agent_panel_scope;
+                self.agent_panel_remotes = ui.agent_panel_remotes;
                 self.status_indicators = ui.status_indicators;
                 self.sound_enabled = ui.sound.enabled;
                 self.toast_delivery = ui.toast.delivery;
@@ -458,6 +475,7 @@ mod tests {
         next.ui.sidebar_width = 31;
         next.ui.tab_bar_position = TabBarPositionConfig::Bottom;
         next.ui.agent_panel_sort = crate::config::AgentPanelSortConfig::Priority;
+        next.ui.agent_panel_scope = crate::config::AgentPanelScopeConfig::ActiveWorkspace;
         next.ui.status_indicators = crate::config::StatusIndicatorStyle::Symbols;
         next.ui.sidebar.agents = toml::from_str("rows = [[{ token = 'machine', rules = [{ equals = 'Local', bold = true }] }]]\nrow_gap = 2").unwrap();
         next.keys.prefix = "ctrl+a".to_owned();
@@ -470,6 +488,10 @@ mod tests {
         assert_eq!(
             shell.agent_panel_sort,
             crate::config::AgentPanelSortConfig::Priority
+        );
+        assert_eq!(
+            shell.agent_panel_scope,
+            crate::config::AgentPanelScopeConfig::ActiveWorkspace
         );
         assert_eq!(
             shell.status_indicators,

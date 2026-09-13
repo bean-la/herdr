@@ -239,6 +239,23 @@ pub(super) fn snapshot(
         tabs,
         panes,
         agents,
+        remote_agents: app
+            .state
+            .remote_agents
+            .iter()
+            .map(|agent| protocol::ClientShellRemoteAgent {
+                agent_id: agent.agent_id.clone(),
+                project: agent.project.clone(),
+                lane: agent.lane.clone(),
+                status: agent.status.clone(),
+                user: agent.user.clone(),
+                cwd: agent.cwd.clone(),
+                process_alive: agent.process_alive,
+                stream_alive: agent.stream_alive,
+                last_seen_ts: agent.last_seen_ts.clone(),
+                session_memo: agent.session_memo.clone(),
+            })
+            .collect(),
         commands: app.client_shell_command_manifest(),
     }
 }
