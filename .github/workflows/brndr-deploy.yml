@@ -7,7 +7,7 @@ name: brndr build and publish
 
 on:
   push:
-    branches: [brndr, protocol-22-herm-port]
+    branches: [brndr]
     paths:
       - 'src/**'
       - 'Cargo.toml'
