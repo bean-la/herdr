@@ -36,12 +36,15 @@ const REMOTE_BINARY_ENV_VAR: &str = "HERDR_REMOTE_BINARY";
 const REMOTE_OUTPUT_READY_MARKER: &str = "herdr-remote-output-ready:1";
 const SSH_CONTROL_SOCKET_NAME: &str = "ctl";
 pub(crate) fn run_remote(remote: RemoteLaunch) -> io::Result<()> {
+    // Explicit isolated-mode label: `--remote` never attaches to/controls the
+    // Herm parent. Project users that need scoped parent attach use attach-proxy.
+    eprintln!("{}", remote_mode_label(&remote.target));
     let session_name = crate::session::active_name()
         .unwrap_or_else(|| crate::session::DEFAULT_SESSION_NAME.to_string());
     let local_socket = local_forward_socket_path(&remote.target, &session_name);
     let program = std::env::args()
         .next()
-        .unwrap_or_else(|| "herdr".to_string());
+        .unwrap_or_else(|| "brndr".to_string());
     let reattach_command = reattach_command(
         &program,
         &remote.target,
@@ -81,6 +84,106 @@ pub(crate) fn run_remote(remote: RemoteLaunch) -> io::Result<()> {
     )?;
 
     run_client_process(&local_socket, &reattach_command, remote.keybindings)
+}
+
+/// Human-readable mode label shown before launching an SSH-backed session.
+/// This is intentionally explicit: `--remote` creates an isolated,
+/// project-owned session and never attaches to or controls the Herm parent.
+pub(crate) fn remote_mode_label(target: &str) -> String {
+    format!("isolated remote project-owned session ({target})")
+}
+
+/// Resolve a project's root-pane terminal_id via the Herm API socket.
+///
+/// Finds the workspace whose label matches `project`, then its first pane's
+/// `terminal_id`. Used by `brndr attach-proxy` so a project user attaches to
+/// their OWN workspace pane on the Herm-owned server (D127) — never a fleet
+/// view and never a freshly-spawned project-user server.
+fn resolve_project_root_terminal(project: &str) -> io::Result<String> {
+    use crate::api::client::ApiClient;
+    use crate::api::schema::{Method, Request};
+
+    let client = ApiClient::local();
+    // 1. workspace.list → find the workspace whose label == project.
+    let workspaces_value = client
+        .request_value(&Request {
+            id: format!("attach-proxy:{project}:workspaces"),
+            method: Method::WorkspaceList(crate::api::schema::EmptyParams::default()),
+        })
+        .map_err(|e| io::Error::other(format!("workspace.list failed: {e}")))?;
+    let workspaces = workspaces_value
+        .get("result")
+        .and_then(|r| r.get("workspaces"))
+        .and_then(|w| w.as_array())
+        .ok_or_else(|| io::Error::other("workspace.list: malformed response"))?;
+    let ws_id = select_workspace_id(workspaces, project).ok_or_else(|| {
+        io::Error::other(format!(
+            "attach-proxy: no workspace labeled '{project}' on the Herm server"
+        ))
+    })?;
+
+    // 2. pane.list for that workspace → first pane's terminal_id.
+    let panes_value = client
+        .request_value(&Request {
+            id: format!("attach-proxy:{project}:panes"),
+            method: Method::PaneList(crate::api::schema::panes::PaneListParams {
+                workspace_id: Some(ws_id.clone()),
+            }),
+        })
+        .map_err(|e| io::Error::other(format!("pane.list failed: {e}")))?;
+    let panes = panes_value
+        .get("result")
+        .and_then(|r| r.get("panes"))
+        .and_then(|p| p.as_array())
+        .ok_or_else(|| io::Error::other("pane.list: malformed response"))?;
+    select_first_terminal(panes).ok_or_else(|| {
+        io::Error::other(format!(
+            "attach-proxy: no pane with a terminal in workspace '{project}'"
+        ))
+    })
+}
+
+/// Pure: among a workspace.list payload, return the workspace_id whose label
+/// matches `project`. Testable in isolation — proves the proxy can only ever
+/// select the CALLER's own workspace (never another tenant's).
+fn select_workspace_id(workspaces: &[serde_json::Value], project: &str) -> Option<String> {
+    workspaces
+        .iter()
+        .find(|w| w.get("label").and_then(|l| l.as_str()) == Some(project))
+        .and_then(|w| w.get("workspace_id"))
+        .and_then(|id| id.as_str())
+        .map(str::to_owned)
+}
+
+/// Pure: among a pane.list payload for the selected workspace, return the first
+/// terminal_id. The workspace filter is applied by the caller (we only ever
+/// request the caller's own workspace), so the first pane's terminal is safe.
+fn select_first_terminal(panes: &[serde_json::Value]) -> Option<String> {
+    panes.iter().find_map(|p| {
+        p.get("terminal_id")
+            .and_then(|t| t.as_str())
+            .map(str::to_owned)
+    })
+}
+
+/// `brndr attach-proxy <project> [--takeover]` — D127 scoped project-user
+/// attach.
+///
+/// Connects to the Herm-owned server's CLIENT socket (as herm) and attaches in
+/// TerminalAttach mode to the given project's OWN root-pane terminal. This
+/// gives the project user a scoped single-terminal stream — no fleet view, no
+/// raw API socket control, and crucially NO independent project-user herdr
+/// server is spawned (unlike native `herdr --remote`). Native remote-client-
+/// bridge remains reserved for the herm service account (`--remote herm-b`).
+pub(crate) fn run_attach_proxy(args: &[String]) -> io::Result<()> {
+    let project = args
+        .iter()
+        .find(|a| !a.starts_with("--"))
+        .cloned()
+        .ok_or_else(|| io::Error::other("usage: brndr attach-proxy <project> [--takeover]"))?;
+    let takeover = args.iter().any(|a| a == "--takeover");
+    let terminal_id = resolve_project_root_terminal(&project)?;
+    crate::client::run_terminal_attach(terminal_id, takeover)
 }
 
 pub(crate) fn prepare_saved_ssh(target: &str, session_name: &str) -> io::Result<()> {
@@ -1992,12 +2095,21 @@ fn remote_release_asset(asset_key: &str) -> io::Result<RemoteReleaseAsset> {
     let manifest_bytes = fetch_remote_manifest(STABLE_UPDATE_MANIFEST_URL)?;
     let manifest: RemoteUpdateManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|err| io::Error::other(format!("failed to parse update manifest JSON: {err}")))?;
-    let release = manifest.release_for_version(&current_version).ok_or_else(|| {
-        io::Error::other(format!(
-            "release manifest does not include herdr {current_version}; build herdr for {} or install it there manually",
-            asset_key
-        ))
-    })?;
+    let Some(release) = manifest.release_for_version(&current_version) else {
+        // brndr is a Herm-managed rolling fork build. Its Linux artifact is
+        // published separately from stable herdr.dev releases.
+        if (current_version.starts_with("0.9.0-") || current_version.starts_with("0.8.2-"))
+            && asset_key == "linux-x86_64"
+        {
+            return Ok(RemoteReleaseAsset {
+                url: "https://github.com/bean-la/herdr/releases/download/brndr-latest/herdr-linux-x86_64".into(),
+                sha256: None,
+            });
+        }
+        return Err(io::Error::other(format!(
+            "release manifest does not include herdr {current_version}; build herdr for {asset_key} or install it there manually"
+        )));
+    };
     if let Some(protocol) = release.protocol {
         if protocol != CURRENT_PROTOCOL {
             return Err(io::Error::other(format!(
@@ -4537,5 +4649,52 @@ mod tests {
         InstallSource::temporary(path, dir.clone()).cleanup();
 
         assert!(!dir.exists());
+    }
+
+    // ── D127 attach-proxy workspace scoping ───────────────────────────
+    fn ws(label: &str, id: &str) -> serde_json::Value {
+        serde_json::json!({ "label": label, "workspace_id": id, "number": 1 })
+    }
+    fn pane(terminal: &str) -> serde_json::Value {
+        serde_json::json!({ "pane_id": "p1", "terminal_id": terminal, "workspace_id": "w1" })
+    }
+
+    #[test]
+    fn remote_mode_label_identifies_isolated_project_owned_session() {
+        assert_eq!(
+            remote_mode_label("slyce@herm-b"),
+            "isolated remote project-owned session (slyce@herm-b)"
+        );
+    }
+
+    #[test]
+    fn select_workspace_id_returns_own_workspace_only() {
+        // Caller is 'slyce' — selection must pick slyce's workspace, never herm's.
+        let workspaces = vec![ws("herm", "wH"), ws("brodie", "wB"), ws("slyce", "wS")];
+        assert_eq!(
+            select_workspace_id(&workspaces, "slyce").as_deref(),
+            Some("wS")
+        );
+        assert_eq!(
+            select_workspace_id(&workspaces, "herm").as_deref(),
+            Some("wH")
+        );
+    }
+
+    #[test]
+    fn select_workspace_id_none_when_project_absent() {
+        let workspaces = vec![ws("herm", "wH")];
+        assert_eq!(select_workspace_id(&workspaces, "slyce"), None);
+    }
+
+    #[test]
+    fn select_first_terminal_returns_own_pane_terminal() {
+        let panes = vec![pane("term_own_1"), pane("term_own_2")];
+        assert_eq!(select_first_terminal(&panes).as_deref(), Some("term_own_1"));
+    }
+
+    #[test]
+    fn select_first_terminal_none_when_no_panes() {
+        assert_eq!(select_first_terminal(&[]), None);
     }
 }

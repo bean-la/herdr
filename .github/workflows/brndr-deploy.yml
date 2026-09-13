@@ -1,0 +1,160 @@
+name: brndr build and publish
+
+# Build and publish only. Herm owns installation, project-user sync, restart
+# markers, and restart policy in its own IaC. This workflow never SSHes to Herm-b,
+# installs a binary, or restarts a server. Deploydaddy/operator may invoke
+# Herm's scripts/remote/brndr-install.sh for a selected immutable artifact SHA.
+
+on:
+  push:
+    branches: [brndr, protocol-22-herm-port]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/macos-split-linker.sh'
+      - '.github/workflows/brndr-deploy.yml'
+  workflow_dispatch:
+
+# Last push wins — installs are fast and idempotent, so cancelling an older
+# queued run is correct.
+concurrency:
+  group: brndr-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-publish-linux:
+    name: Build + publish Linux artifact
+    # Must run on herm-b: the host is private tailnet-only and the build
+    # requires the toolchain installed there.
+    runs-on: ubuntu-latest
+
+    env:
+      RUST_TOOLCHAIN_VERSION: 1.96.1
+      LIBGHOSTTY_VT_OPTIMIZE: ReleaseSafe
+      LIBGHOSTTY_VT_SIMD: 'false'
+      HERM_HOST: ${{ secrets.HERM_HOST }}
+      HERM_SSH_KEY: ${{ secrets.HERM_SSH_KEY }}
+      HERM_SSH_KNOWN_HOSTS: ${{ secrets.HERM_SSH_KNOWN_HOSTS }}
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
+
+      - name: Install Linux build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+
+      - name: Verify toolchain
+        run: cargo --version && zig version
+
+      - name: Build Linux artifact
+        shell: bash -eo pipefail {0}
+        run: |
+          HERDR_BUILD_ID="${GITHUB_SHA:0:8}" cargo build --release --locked
+          cp target/release/brndr herdr-linux-x86_64
+          chmod 0755 herdr-linux-x86_64
+          { echo "version=0.9.0"; echo "protocol=22"; echo "commit=$GITHUB_SHA"; sha256sum herdr-linux-x86_64; } > BUILD_INFO-linux.txt
+
+      - name: Publish immutable Linux artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="brndr-${GITHUB_SHA}"
+          gh release create "$tag" --repo bean-la/herdr --target "$GITHUB_SHA" \
+            --title "$tag" --notes "Immutable brndr build for ${GITHUB_SHA}." \
+            herdr-linux-x86_64 BUILD_INFO-linux.txt
+          gh release upload brndr-latest --repo bean-la/herdr --clobber \
+            herdr-linux-x86_64 BUILD_INFO-linux.txt || true
+
+  # macOS build for the laptop, from the SAME settled commit as the herm-b
+  # linux build — so brndr --remote's version-match check passes against
+  # herm-b and the laptop brndr-bin stays in lockstep. Fleet laptops are
+  # Apple Silicon only, so just aarch64 (no x86_64 mac build). Published to
+  # a rolling `brndr-latest` release (--latest=false keeps semantic releases
+  # as GitHub's "latest"); the laptop fetches herdr-macos-aarch64 from there.
+  # Steps mirror build-artifacts-manual.yml's build-macos job (same pinned
+  # toolchain), with the patched brew zig (see Install step).
+  build-macos:
+    name: Build macOS (brndr-latest release)
+    runs-on: macos-latest
+    env:
+      RUST_TOOLCHAIN_VERSION: 1.96.1
+      LIBGHOSTTY_VT_OPTIMIZE: ReleaseSafe
+      LIBGHOSTTY_VT_SIMD: 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
+          targets: aarch64-apple-darwin
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
+
+      - name: Install macOS build tools
+        run: brew install cmake ninja
+
+      - name: Remove Zig caches
+        run: rm -rf .zig-cache vendor/libghostty-vt/.zig-cache vendor/libghostty-vt/zig-out
+
+      - name: Build
+        # zig 0.15.2's archive has a misaligned compiler_rt.o that Apple ld64
+        # rejects — split linker routes exe links to zig (lld, tolerant) and
+        # proc-macro dylib links to Apple cc (see scripts/macos-split-linker.sh).
+        env:
+          CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER: ${{ github.workspace }}/scripts/macos-split-linker.sh
+        run: HERDR_BUILD_ID="${GITHUB_SHA:0:8}" cargo build --release --locked --target aarch64-apple-darwin
+
+      - name: Package artifact
+        run: |
+          # Cargo bin is named brndr (the herdr fork's binary); ship it under
+          # the herdr-macos-aarch64 asset name for consistent install URLs.
+          cp target/aarch64-apple-darwin/release/brndr herdr-macos-aarch64
+          file herdr-macos-aarch64 > BUILD_INFO.txt
+          {
+            echo "version=0.9.0"
+            echo "protocol=22"
+            echo "commit=$GITHUB_SHA"
+            echo "target=aarch64-apple-darwin"
+            echo "libghostty_vt_optimize=$LIBGHOSTTY_VT_OPTIMIZE"
+            echo "libghostty_vt_simd=$LIBGHOSTTY_VT_SIMD"
+          } >> BUILD_INFO.txt
+          python3 -c "import hashlib, pathlib; artifact = pathlib.Path('herdr-macos-aarch64'); print(f'sha256={hashlib.sha256(artifact.read_bytes()).hexdigest()}  {artifact.name}')" >> BUILD_INFO.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: herdr-macos-aarch64
+          path: |
+            herdr-macos-aarch64
+            BUILD_INFO.txt
+          retention-days: 14
+
+      - name: Publish to brndr-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPO=bean-la/herdr
+          gh release view brndr-latest --repo "$REPO" >/dev/null 2>&1 \
+            || gh release create brndr-latest --repo "$REPO" --latest=false \
+                 --title "brndr rolling builds" \
+                 --notes "Rolling herdr fork builds for the settled commit — herm-b installs the linux build, laptops fetch the macos build."
+          gh release upload brndr-latest --repo "$REPO" --clobber herdr-macos-aarch64 BUILD_INFO.txt

@@ -20,6 +20,12 @@ include = [
     "Cargo.toml",
 ]
 
+# brndr — Herm fork binary. Package stays `herdr` for clean upstream merges;
+# the produced binary is `brndr` (separation from managed `herdr`).
+[[bin]]
+name = "brndr"
+path = "src/main.rs"
+
 [dependencies]
 base64 = "0.22.1"
 bincode = { version = "2", features = ["serde"] }

@@ -64,7 +64,7 @@ impl Harness {
         fs::create_dir_all(root.join("bin")).unwrap();
         fs::write(root.join("bin/ssh"), SSH).unwrap();
         fs::set_permissions(root.join("bin/ssh"), fs::Permissions::from_mode(0o700)).unwrap();
-        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_herdr"), root.join("remote herdr")).unwrap();
+        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_brndr"), root.join("remote herdr")).unwrap();
         fs::write(state.join("endpoints.json"), serde_json::to_vec(&json!({
             "version": 1,
             "ssh": [{"id": PROFILE_ID, "label": "mac", "target": "fake-mac", "session": "fleet", "enabled": true}]
@@ -73,7 +73,7 @@ impl Harness {
         remote.set_nonblocking(true).unwrap();
         let local = UnixListener::bind(root.join("local.sock")).unwrap();
         local.set_nonblocking(true).unwrap();
-        let status = Command::new(env!("CARGO_BIN_EXE_herdr"))
+        let status = Command::new(env!("CARGO_BIN_EXE_brndr"))
             .args(["status", "client", "--json"])
             .output()
             .unwrap();
@@ -87,7 +87,7 @@ impl Harness {
     }
 
     fn command(&self, args: &[&str]) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_herdr"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_brndr"));
         command
             .args(args)
             .env(
