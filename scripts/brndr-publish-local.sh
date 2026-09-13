@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Local equivalent of .github/workflows/brndr-deploy.yml.
 # Builds Linux (Docker) + macOS (native) artifacts and publishes releases.
+# For build + laptop/VPS deploy without GitHub runners, use brndr-deploy-local.sh.
 set -euo pipefail
 
 REPO="${BRNDR_REPO:-bean-la/herdr}"
