@@ -1638,3 +1638,131 @@ fn remote_presence_rows_hide_other_projects_in_here_scope() {
         "project-user presence for another project should be hidden in here scope: {text}"
     );
 }
+
+#[test]
+fn lane_tab_fallback_rows_show_workspace_tabs_without_detected_agents() {
+    let mut projected = snapshot();
+    projected.workspaces[0].label = "slyce".into();
+    projected.tabs = vec![
+        ClientShellTab {
+            tab_id: "tab_g".into(),
+            workspace_id: "ws_1".into(),
+            number: 1,
+            label: "goaldaddy".into(),
+            custom_label: true,
+            zoomed: false,
+            focused: true,
+            agent_status: AgentStatus::Idle,
+        },
+        ClientShellTab {
+            tab_id: "tab_t".into(),
+            workspace_id: "ws_1".into(),
+            number: 2,
+            label: "taskdaddy".into(),
+            custom_label: true,
+            zoomed: false,
+            focused: false,
+            agent_status: AgentStatus::Idle,
+        },
+    ];
+    projected.panes = vec![
+        ClientShellPane {
+            pane_id: "pane_g".into(),
+            workspace_id: "ws_1".into(),
+            tab_id: "tab_g".into(),
+            label: None,
+            cwd: Some("/repo".into()),
+            foreground_cwd: Some("/repo".into()),
+            focused: true,
+            right_click_passthrough: false,
+        },
+        ClientShellPane {
+            pane_id: "pane_t".into(),
+            workspace_id: "ws_1".into(),
+            tab_id: "tab_t".into(),
+            label: None,
+            cwd: Some("/repo".into()),
+            foreground_cwd: Some("/repo".into()),
+            focused: false,
+            right_click_passthrough: false,
+        },
+    ];
+    projected.remote_agents.push(crate::protocol::ClientShellRemoteAgent {
+        agent_id: "herm-b-slyce-goaldaddy".into(),
+        project: "slyce".into(),
+        lane: "goaldaddy".into(),
+        status: "idle".into(),
+        user: "herm".into(),
+        cwd: None,
+        process_alive: true,
+        stream_alive: true,
+        last_seen_ts: None,
+        session_memo: None,
+    });
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("lane tab fallback sidebar");
+    let text = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        text.contains("goaldaddy"),
+        "lane tabs should render as local sidebar rows: {text}"
+    );
+    assert!(
+        text.contains("taskdaddy"),
+        "all lane tabs in the workspace should render: {text}"
+    );
+    assert!(
+        !text.contains("remote"),
+        "fleet lanes on this server should not duplicate as remote presence rows: {text}"
+    );
+}
+
+#[test]
+fn cross_host_presence_rows_label_host_and_lane() {
+    let mut projected = snapshot();
+    projected.workspaces[0].label = "slyce".into();
+    projected.remote_agents = vec![crate::protocol::ClientShellRemoteAgent {
+        agent_id: "sebluair-slyce-moody-34e8".into(),
+        project: "slyce".into(),
+        lane: "moody-34e8".into(),
+        status: "idle".into(),
+        user: "slyce".into(),
+        cwd: None,
+        process_alive: true,
+        stream_alive: true,
+        last_seen_ts: None,
+        session_memo: None,
+    }];
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("cross-host presence sidebar");
+    let text = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        text.contains("sebluair"),
+        "cross-host presence should show the source host, not a generic remote label: {text}"
+    );
+    assert!(
+        text.contains("moody-34e8"),
+        "cross-host presence should show the lane as the tab token: {text}"
+    );
+}

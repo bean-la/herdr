@@ -281,6 +281,123 @@ fn remote_presence_matches_scope(
     }
 }
 
+/// True when this server already has a workspace tab named for the lane.
+/// Fleet lanes on the VPS should render as local tab rows, not presence rows.
+fn workspace_has_lane_tab(
+    snapshot: &ClientShellSnapshot,
+    project: &str,
+    lane: &str,
+) -> bool {
+    snapshot
+        .workspaces
+        .iter()
+        .filter(|workspace| workspace.label == project)
+        .flat_map(|workspace| {
+            snapshot
+                .tabs
+                .iter()
+                .filter(|tab| tab.workspace_id == workspace.workspace_id)
+        })
+        .any(|tab| tab.label == lane)
+}
+
+fn presence_host(agent_id: &str, project: &str, lane: &str) -> String {
+    let suffix = format!("-{project}-{lane}");
+    if let Some(host) = agent_id.strip_suffix(&suffix) {
+        if !host.is_empty() {
+            return host.to_string();
+        }
+    }
+    agent_id
+        .split('-')
+        .next()
+        .filter(|part| !part.is_empty())
+        .unwrap_or("remote")
+        .to_string()
+}
+
+fn primary_pane_for_tab<'a>(
+    snapshot: &'a ClientShellSnapshot,
+    workspace_id: &str,
+    tab_id: &str,
+) -> Option<&'a crate::protocol::ClientShellPane> {
+    let panes = snapshot
+        .panes
+        .iter()
+        .filter(|pane| pane.workspace_id == workspace_id && pane.tab_id == tab_id)
+        .collect::<Vec<_>>();
+    panes
+        .iter()
+        .find(|pane| pane.focused)
+        .or_else(|| panes.first())
+        .copied()
+}
+
+fn lane_tab_agent_rows(
+    snapshot: &ClientShellSnapshot,
+    config: &ClientShellConfig,
+) -> Vec<AgentRow> {
+    if snapshot.agent_view_label.is_some() {
+        return Vec::new();
+    }
+    let covered_panes = snapshot
+        .agents
+        .iter()
+        .map(|agent| agent.pane_id.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    let mut rows = Vec::new();
+    for workspace in &snapshot.workspaces {
+        if !agent_matches_scope(
+            snapshot,
+            workspace.workspace_id.as_str(),
+            config.agent_panel_scope,
+        ) {
+            continue;
+        }
+        let mut tabs = snapshot
+            .tabs
+            .iter()
+            .filter(|tab| tab.workspace_id == workspace.workspace_id)
+            .collect::<Vec<_>>();
+        tabs.sort_by_key(|tab| tab.number);
+        let tab_count = tabs.len();
+        for tab in tabs {
+            let Some(pane) = primary_pane_for_tab(snapshot, &workspace.workspace_id, &tab.tab_id)
+            else {
+                continue;
+            };
+            if covered_panes.contains(pane.pane_id.as_str()) {
+                continue;
+            }
+            let tab_label = (tab_count > 1 || tab.custom_label)
+                .then_some(tab.label.as_str());
+            let ui_rows = crate::ui::sidebar_agent_rows(
+                &config.agents,
+                crate::ui::AgentTokenContext {
+                    machine: None,
+                    workspace: &workspace.label,
+                    tab: tab_label,
+                    pane: pane.label.as_deref(),
+                    agent_label: Some(tab.label.as_str()),
+                    terminal_title: None,
+                    terminal_title_stripped: None,
+                    canonical_agent: None,
+                    tokens: &HashMap::new(),
+                },
+                sidebar_status_text(crate::api::schema::AgentStatus::Idle),
+            );
+            rows.push(AgentRow {
+                pane_id: pane.pane_id.clone(),
+                status: crate::api::schema::AgentStatus::Idle,
+                focused: pane.focused,
+                remote: false,
+                rows: ui_rows,
+            });
+        }
+    }
+    rows
+}
+
 pub(super) fn render_agent_list<T>(
     buffer: &mut Buffer,
     area: Rect,
@@ -443,6 +560,7 @@ pub(super) fn agent_rows(
                 rows,
             })
         })
+        .chain(lane_tab_agent_rows(snapshot, config))
         .chain(remote_agent_rows(snapshot, config))
         .collect()
 }
@@ -458,9 +576,13 @@ fn remote_agent_rows<'a>(
         .filter(|agent| {
             remote_presence_matches_scope(snapshot, agent.project.as_str(), config.agent_panel_scope)
         })
+        .filter(|agent| {
+            !workspace_has_lane_tab(snapshot, agent.project.as_str(), agent.lane.as_str())
+        })
         .map(|agent| {
             let status = remote_agent_status(&agent.status);
             let label = format!("{} · {}", agent.project, agent.lane);
+            let host = presence_host(&agent.agent_id, &agent.project, &agent.lane);
             let tokens = agent
                 .session_memo
                 .as_ref()
@@ -470,9 +592,9 @@ fn remote_agent_rows<'a>(
             let rows = crate::ui::sidebar_agent_rows(
                 &config.agents,
                 crate::ui::AgentTokenContext {
-                    machine: Some("remote"),
+                    machine: Some(host.as_str()),
                     workspace: &agent.project,
-                    tab: Some("remote project-user"),
+                    tab: Some(agent.lane.as_str()),
                     pane: None,
                     agent_label: Some(label.as_str()),
                     terminal_title: None,
