@@ -158,15 +158,6 @@ jobs:
           python3 -c "import hashlib, pathlib; artifact = pathlib.Path('herdr-macos-aarch64'); print(f'sha256={hashlib.sha256(artifact.read_bytes()).hexdigest()}  {artifact.name}')" >> BUILD_INFO.txt
 
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: herdr-macos-aarch64
-          path: |
-            herdr-macos-aarch64
-            BUILD_INFO.txt
-          retention-days: 14
-
-      - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: herdr-macos-aarch64
