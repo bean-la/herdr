@@ -105,14 +105,22 @@ jobs:
   # macOS build for the laptop, from the SAME settled commit as the herm-b
   # linux build — so brndr --remote's version-match check passes against
   # herm-b and the laptop brndr-bin stays in lockstep. Fleet laptops are
-  # Apple Silicon; GitHub macos-latest is ARM and cannot cross-compile
-  # x86_64-apple-darwin with the current zig/ghostty toolchain.
-  # Publish the aarch64 macOS build to the rolling `brndr-latest` release
-  # (--latest=false keeps semantic releases as GitHub's "latest").
+  # Publish both Intel and Apple Silicon macOS builds to the rolling
+  # `brndr-latest` release (--latest=false keeps semantic releases as GitHub's
+  # "latest").
+  # Steps mirror build-artifacts-manual.yml's build-macos job (same pinned
+  # toolchain), with the patched brew zig (see Install step).
   build-macos:
     name: Build macOS (brndr-latest release)
     needs: build-publish-linux
     runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            asset: herdr-macos-x86_64
+          - target: aarch64-apple-darwin
+            asset: herdr-macos-aarch64
     env:
       RUST_TOOLCHAIN_VERSION: 1.96.1
       LIBGHOSTTY_VT_OPTIMIZE: ReleaseSafe
@@ -127,7 +135,7 @@ jobs:
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # v1
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
-          targets: aarch64-apple-darwin
+          targets: ${{ matrix.target }}
 
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -144,7 +152,7 @@ jobs:
             .zig-cache
             vendor/libghostty-vt/.zig-cache
             vendor/libghostty-vt/zig-out
-          key: brndr-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN_VERSION }}-aarch64-apple-darwin-${{ hashFiles('Cargo.lock', 'vendor/libghostty-vt/build.zig*') }}
+          key: brndr-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ matrix.target }}-${{ hashFiles('Cargo.lock', 'vendor/libghostty-vt/build.zig*') }}
 
       - name: Install macOS build tools
         run: brew install cmake ninja
@@ -156,30 +164,30 @@ jobs:
         env:
           CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER: ${{ github.workspace }}/scripts/macos-split-linker.sh
           CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER: ${{ github.workspace }}/scripts/macos-split-linker.sh
-        run: HERDR_BUILD_ID="${GITHUB_SHA:0:8}" cargo build --release --locked --target aarch64-apple-darwin
+        run: HERDR_BUILD_ID="${GITHUB_SHA:0:8}" cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Package artifact
         run: |
           # Cargo bin is named brndr (the herdr fork's binary); ship it under
           # the herdr-macos-aarch64 asset name for consistent install URLs.
-          cp target/aarch64-apple-darwin/release/brndr herdr-macos-aarch64
-          file herdr-macos-aarch64 > BUILD_INFO.txt
+          cp target/${{ matrix.target }}/release/brndr ${{ matrix.asset }}
+          file ${{ matrix.asset }} > BUILD_INFO.txt
           {
             echo "version=0.9.0"
             echo "protocol=22"
             echo "commit=$GITHUB_SHA"
-            echo "target=aarch64-apple-darwin"
+            echo "target=${{ matrix.target }}"
             echo "libghostty_vt_optimize=$LIBGHOSTTY_VT_OPTIMIZE"
             echo "libghostty_vt_simd=$LIBGHOSTTY_VT_SIMD"
           } >> BUILD_INFO.txt
-          python3 -c "import hashlib, pathlib; artifact = pathlib.Path('herdr-macos-aarch64'); print(f'sha256={hashlib.sha256(artifact.read_bytes()).hexdigest()}  {artifact.name}')" >> BUILD_INFO.txt
+          python3 -c "import hashlib, pathlib; artifact = pathlib.Path('${{ matrix.asset }}'); print(f'sha256={hashlib.sha256(artifact.read_bytes()).hexdigest()}  {artifact.name}')" >> BUILD_INFO.txt
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: herdr-macos-aarch64
+          name: ${{ matrix.asset }}
           path: |
-            herdr-macos-aarch64
+            ${{ matrix.asset }}
             BUILD_INFO.txt
           retention-days: 14
 
@@ -199,13 +207,17 @@ jobs:
           REPO=bean-la/herdr
           linux_dir="artifacts/herdr-linux-x86_64"
           macos_arm_dir="artifacts/herdr-macos-aarch64"
+          macos_x86_dir="artifacts/herdr-macos-x86_64"
           test -f "$linux_dir/herdr-linux-x86_64"
           test -f "$linux_dir/BUILD_INFO-linux.txt"
           test -f "$macos_arm_dir/herdr-macos-aarch64"
           test -f "$macos_arm_dir/BUILD_INFO.txt"
+          test -f "$macos_x86_dir/herdr-macos-x86_64"
+          test -f "$macos_x86_dir/BUILD_INFO.txt"
           gh release view brndr-latest --repo "$REPO" >/dev/null 2>&1 \
             || gh release create brndr-latest --repo "$REPO" --latest=false \
                  --title "brndr rolling builds" --notes "Rolling herdr fork builds for the settled commit."
           gh release upload brndr-latest --repo "$REPO" --clobber \
             "$linux_dir/herdr-linux-x86_64" "$linux_dir/BUILD_INFO-linux.txt" \
-            "$macos_arm_dir/herdr-macos-aarch64" "$macos_arm_dir/BUILD_INFO.txt"
+            "$macos_arm_dir/herdr-macos-aarch64" "$macos_arm_dir/BUILD_INFO.txt" \
+            "$macos_x86_dir/herdr-macos-x86_64" "$macos_x86_dir/BUILD_INFO.txt"
