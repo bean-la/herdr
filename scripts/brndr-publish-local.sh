@@ -58,7 +58,7 @@ build_macos() {
 build_linux() {
   echo "==> Building Linux artifact (Docker)"
   command -v docker >/dev/null
-  docker run --rm \
+  docker run --rm --platform linux/amd64 \
     -v "$ROOT:/work" \
     -w /work \
     -e HERDR_BUILD_ID="$SHORT_SHA" \
