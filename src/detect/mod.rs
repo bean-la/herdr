@@ -332,6 +332,13 @@ pub(crate) fn session_identity_only_integration(source: &str, agent_label: &str)
     )
 }
 
+/// Session hooks that can establish sidebar/list identity without a foreground
+/// process match — e.g. cursor in a project-user `sudo -iu` pane where herdr
+/// sees `sudo` as the process-group leader, not `agent`.
+pub(crate) fn session_sidebar_agent_identity(source: &str, agent_label: &str) -> bool {
+    matches!((source, agent_label), ("herdr:cursor", "cursor"))
+}
+
 // ---------------------------------------------------------------------------
 // Process identification (platform-specific)
 // ---------------------------------------------------------------------------
@@ -1523,6 +1530,12 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[test]
+    fn session_sidebar_agent_identity_matches_cursor_hook() {
+        assert!(session_sidebar_agent_identity("herdr:cursor", "cursor"));
+        assert!(!session_sidebar_agent_identity("herdr:pi", "pi"));
+    }
+
     #[test]
     fn identify_agent_in_job_resolves_cursor_agent_symlink_argv0() {
         let dir = temp_detection_path("cursor-agent-symlink");
