@@ -1585,6 +1585,7 @@ fn remote_presence_rows_remain_visible_when_scope_filters_local_agents() {
         tokens: Vec::new(),
         focused: false,
     });
+    projected.workspaces[0].label = "slyce".into();
     projected.remote_agents = vec![remote_presence_agent()];
     let mut config = Config::default();
     config.ui.agent_panel_scope = crate::config::AgentPanelScopeConfig::ActiveWorkspace;
@@ -1608,6 +1609,32 @@ fn remote_presence_rows_remain_visible_when_scope_filters_local_agents() {
     );
     assert!(
         text.contains("slyce · perky-e9fb"),
-        "remote presence rows stay visible in here scope: {text}"
+        "matching project-user presence should stay visible in here scope: {text}"
+    );
+}
+
+#[test]
+fn remote_presence_rows_hide_other_projects_in_here_scope() {
+    let mut projected = snapshot();
+    projected.remote_agents = vec![remote_presence_agent()];
+    let mut config = Config::default();
+    config.ui.agent_panel_scope = crate::config::AgentPanelScopeConfig::ActiveWorkspace;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("scoped presence sidebar");
+    let text = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !text.contains("slyce · perky-e9fb"),
+        "project-user presence for another project should be hidden in here scope: {text}"
     );
 }

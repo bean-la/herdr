@@ -243,6 +243,16 @@ fn effective_scope_workspace_id(snapshot: &ClientShellSnapshot) -> Option<&str> 
         })
 }
 
+fn effective_scope_workspace_label(snapshot: &ClientShellSnapshot) -> Option<&str> {
+    effective_scope_workspace_id(snapshot).and_then(|workspace_id| {
+        snapshot
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.workspace_id == workspace_id)
+            .map(|workspace| workspace.label.as_str())
+    })
+}
+
 fn agent_matches_scope(
     snapshot: &ClientShellSnapshot,
     agent_workspace_id: &str,
@@ -253,6 +263,20 @@ fn agent_matches_scope(
     }
     match effective_scope_workspace_id(snapshot) {
         Some(workspace_id) => agent_workspace_id == workspace_id,
+        None => true,
+    }
+}
+
+fn remote_presence_matches_scope(
+    snapshot: &ClientShellSnapshot,
+    project: &str,
+    scope: crate::config::AgentPanelScopeConfig,
+) -> bool {
+    if scope == crate::config::AgentPanelScopeConfig::All {
+        return true;
+    }
+    match effective_scope_workspace_label(snapshot) {
+        Some(label) => project == label,
         None => true,
     }
 }
@@ -431,6 +455,9 @@ fn remote_agent_rows<'a>(
         .remote_agents
         .iter()
         .filter(|_| snapshot.agent_view_label.is_none())
+        .filter(|agent| {
+            remote_presence_matches_scope(snapshot, agent.project.as_str(), config.agent_panel_scope)
+        })
         .map(|agent| {
             let status = remote_agent_status(&agent.status);
             let label = format!("{} · {}", agent.project, agent.lane);
