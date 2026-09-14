@@ -172,7 +172,7 @@ jobs:
           # Cargo bin is named brndr (the herdr fork's binary); ship it under
           # the herdr-macos-aarch64 asset name for consistent install URLs.
           cp target/${{ matrix.target }}/release/brndr ${{ matrix.asset }}
-          file ${{ matrix.asset }} > BUILD_INFO.txt
+          file ${{ matrix.asset }} > BUILD_INFO-${{ matrix.asset }}.txt
           {
             echo "version=0.9.0"
             echo "protocol=22"
@@ -180,8 +180,8 @@ jobs:
             echo "target=${{ matrix.target }}"
             echo "libghostty_vt_optimize=$LIBGHOSTTY_VT_OPTIMIZE"
             echo "libghostty_vt_simd=$LIBGHOSTTY_VT_SIMD"
-          } >> BUILD_INFO.txt
-          python3 -c "import hashlib, pathlib; artifact = pathlib.Path('${{ matrix.asset }}'); print(f'sha256={hashlib.sha256(artifact.read_bytes()).hexdigest()}  {artifact.name}')" >> BUILD_INFO.txt
+          } >> BUILD_INFO-${{ matrix.asset }}.txt
+          python3 -c "import hashlib, pathlib; artifact = pathlib.Path('${{ matrix.asset }}'); print(f'sha256={hashlib.sha256(artifact.read_bytes()).hexdigest()}  {artifact.name}')" >> BUILD_INFO-${{ matrix.asset }}.txt
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -189,7 +189,7 @@ jobs:
           name: ${{ matrix.asset }}
           path: |
             ${{ matrix.asset }}
-            BUILD_INFO.txt
+            BUILD_INFO-${{ matrix.asset }}.txt
           retention-days: 14
 
   publish-rolling:
@@ -212,13 +212,13 @@ jobs:
           test -f "$linux_dir/herdr-linux-x86_64"
           test -f "$linux_dir/BUILD_INFO-linux.txt"
           test -f "$macos_arm_dir/herdr-macos-aarch64"
-          test -f "$macos_arm_dir/BUILD_INFO.txt"
+          test -f "$macos_arm_dir/BUILD_INFO-herdr-macos-aarch64.txt"
           test -f "$macos_x86_dir/herdr-macos-x86_64"
-          test -f "$macos_x86_dir/BUILD_INFO.txt"
+          test -f "$macos_x86_dir/BUILD_INFO-herdr-macos-x86_64.txt"
           gh release view brndr-latest --repo "$REPO" >/dev/null 2>&1 \
             || gh release create brndr-latest --repo "$REPO" --latest=false \
                  --title "brndr rolling builds" --notes "Rolling herdr fork builds for the settled commit."
           gh release upload brndr-latest --repo "$REPO" --clobber \
             "$linux_dir/herdr-linux-x86_64" "$linux_dir/BUILD_INFO-linux.txt" \
-            "$macos_arm_dir/herdr-macos-aarch64" "$macos_arm_dir/BUILD_INFO.txt" \
-            "$macos_x86_dir/herdr-macos-x86_64" "$macos_x86_dir/BUILD_INFO.txt"
+            "$macos_arm_dir/herdr-macos-aarch64" "$macos_arm_dir/BUILD_INFO-herdr-macos-aarch64.txt" \
+            "$macos_x86_dir/herdr-macos-x86_64" "$macos_x86_dir/BUILD_INFO-herdr-macos-x86_64.txt"
