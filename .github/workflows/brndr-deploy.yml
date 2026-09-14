@@ -113,14 +113,16 @@ jobs:
   build-macos:
     name: Build macOS (brndr-latest release)
     needs: build-publish-linux
-    runs-on: macos-latest
     strategy:
       matrix:
         include:
           - target: x86_64-apple-darwin
             asset: herdr-macos-x86_64
+            os: macos-13
           - target: aarch64-apple-darwin
             asset: herdr-macos-aarch64
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
     env:
       RUST_TOOLCHAIN_VERSION: 1.96.1
       LIBGHOSTTY_VT_OPTIMIZE: ReleaseSafe
