@@ -118,7 +118,7 @@ jobs:
         include:
           - target: x86_64-apple-darwin
             asset: herdr-macos-x86_64
-            os: macos-13
+            os: [self-hosted, macOS, x86_64, sebsixt]
           - target: aarch64-apple-darwin
             asset: herdr-macos-aarch64
             os: macos-latest
