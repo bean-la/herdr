@@ -113,17 +113,41 @@ fn agent_rows(
         })
         .flatten()
         .collect::<HashMap<_, _>>();
+    let mut ordered_keys = Vec::new();
 
-    super::aggregate_navigation::aggregate_agent_rows(endpoints, config.agent_panel_sort)
+    // Aggregate navigation orders local pane agents, but remote presence rows
+    // intentionally have no pane and therefore never appear in that list.
+    // Keep the aggregate ordering for local rows, then append all remaining
+    // rows in endpoint/snapshot order (including laptop-visible remotes).
+    for row in super::aggregate_navigation::aggregate_agent_rows(endpoints, config.agent_panel_sort)
+    {
+        ordered_keys.push((
+            row.endpoint.endpoint_id.clone(),
+            row.agent.pane_id.clone(),
+        ));
+    }
+    for endpoint in endpoints {
+        if let Some(snapshot) = endpoint.snapshot.as_deref() {
+            for agent in super::agent_sidebar::agent_rows(snapshot, config, Some(&endpoint.label)) {
+                let key = (endpoint.endpoint_id.clone(), agent.pane_id.clone());
+                if !ordered_keys.contains(&key) {
+                    ordered_keys.push(key);
+                }
+            }
+        }
+    }
+
+    ordered_keys
         .into_iter()
-        .filter_map(|row| {
-            let key = (row.endpoint.endpoint_id.clone(), row.agent.pane_id.clone());
+        .filter_map(|key| {
+            let endpoint_id = key.0.clone();
+            let endpoint = endpoints.iter().find(|endpoint| endpoint.endpoint_id == endpoint_id)?;
             let mut agent = rendered_rows.remove(&key)?;
-            agent.focused &= row.endpoint.endpoint_id == active_endpoint_id;
+            agent.focused &= &endpoint.endpoint_id == active_endpoint_id;
             Some(EndpointAgentRow {
-                endpoint_id: row.endpoint.endpoint_id.clone(),
-                machine_label: row.endpoint.label.to_owned(),
-                stale: row.endpoint.stale(),
+                endpoint_id,
+                machine_label: endpoint.label.clone(),
+                stale: endpoint.status != ClientEndpointStatus::Online,
                 agent,
             })
         })

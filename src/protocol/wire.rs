@@ -1081,6 +1081,10 @@ pub struct ClientShellAgent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClientShellRemoteAgent {
     pub agent_id: String,
+    /// Host reported by the presence service. None means the source did not
+    /// provide it; clients must not infer a host from an opaque agent id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
     pub project: String,
     pub lane: String,
     pub status: String,
@@ -1090,6 +1094,10 @@ pub struct ClientShellRemoteAgent {
     pub stream_alive: bool,
     pub last_seen_ts: Option<String>,
     pub session_memo: Option<String>,
+    /// Explicit context usage, if the presence feed provides it. Opaque
+    /// presence runtime/context values are deliberately not forwarded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_usage: Option<String>,
 }
 
 /// Origin-relative geometry for one pane in a rendered pane surface.

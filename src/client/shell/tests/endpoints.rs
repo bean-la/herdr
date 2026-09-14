@@ -56,6 +56,57 @@ fn state_with_remote() -> (ClientShellState, ClientEndpointId) {
 }
 
 #[test]
+fn laptop_remote_presence_rows_use_remote_layout_and_selector() {
+    let (mut state, remote) = state_with_remote();
+    state.config.sidebar_max_width = 100;
+    state.sidebar_width = 60;
+    let mut remote_snapshot = snapshot();
+    remote_snapshot.boot_id = "remote-presence-boot".into();
+    remote_snapshot.remote_agents = vec![crate::protocol::ClientShellRemoteAgent {
+        agent_id: "laptop-slyce-pi-lane".into(),
+        host: Some("laptop".into()),
+        project: "slyce".into(),
+        lane: "pi-lane".into(),
+        status: "working".into(),
+        user: "slyce".into(),
+        cwd: None,
+        process_alive: true,
+        stream_alive: true,
+        last_seen_ts: Some("2026-09-14T00:00:00Z".into()),
+        session_memo: None,
+        context_usage: Some("25%".into()),
+    }];
+    state.set_endpoint_snapshot(&remote, Box::new(remote_snapshot));
+    state.set_pane_surface(surface());
+    let shown = state.compose(100, 30).expect("laptop remote presence sidebar");
+    let shown_text = shown
+        .cells
+        .iter()
+        .map(|cell| cell.symbol.as_str())
+        .collect::<String>();
+    assert!(shown_text.contains("slyce"), "remote row should be rendered: {shown_text}");
+    assert!(shown_text.contains("Pi"), "remote kind should be rendered: {shown_text}");
+    assert!(shown_text.contains("25%"), "remote context should be rendered: {shown_text}");
+    assert!(shown_text.contains("ago"), "remote last-seen should be rendered: {shown_text}");
+
+    let toggle = state.hits.agent_remotes_toggle;
+    assert!(!toggle.is_empty(), "remote selector should be interactive");
+    state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: toggle.x,
+        row: toggle.y,
+        modifiers: KeyModifiers::empty(),
+    })]);
+    let hidden = state.compose(100, 30).expect("laptop remote presence hidden");
+    let hidden_text = hidden
+        .cells
+        .iter()
+        .map(|cell| cell.symbol.as_str())
+        .collect::<String>();
+    assert!(!hidden_text.contains("pi-lane"), "selector should hide remotes: {hidden_text}");
+}
+
+#[test]
 fn switching_machines_from_copy_mode_restores_terminal_input() {
     let (mut state, remote) = state_with_remote();
     let mut local_surface = surface();

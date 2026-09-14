@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use ratatui::{
     buffer::Buffer,
@@ -309,21 +310,6 @@ fn workspace_has_lane_tab(
         .any(|tab| tab.label == lane)
 }
 
-fn presence_host(agent_id: &str, project: &str, lane: &str) -> String {
-    let suffix = format!("-{project}-{lane}");
-    if let Some(host) = agent_id.strip_suffix(&suffix) {
-        if !host.is_empty() {
-            return host.to_string();
-        }
-    }
-    agent_id
-        .split('-')
-        .next()
-        .filter(|part| !part.is_empty())
-        .unwrap_or("remote")
-        .to_string()
-}
-
 fn primary_pane_for_tab<'a>(
     snapshot: &'a ClientShellSnapshot,
     workspace_id: &str,
@@ -595,24 +581,38 @@ fn remote_agent_rows<'a>(
         .map(|agent| {
             let status = remote_agent_status(&agent.status);
             let label = format!("{} · {}", agent.project, agent.lane);
-            let host = presence_host(&agent.agent_id, &agent.project, &agent.lane);
-            let tokens = agent
+            let kind = remote_agent_kind(agent);
+            let canonical_agent = (kind == "Pi").then_some(crate::detect::Agent::Pi);
+            let mut tokens = HashMap::new();
+            if let Some(memo) = agent
                 .session_memo
-                .as_ref()
+                .as_deref()
                 .filter(|memo| !memo.is_empty())
-                .map(|memo| HashMap::from([("session_memo".to_string(), memo.clone())]))
-                .unwrap_or_default();
+            {
+                tokens.insert("session_memo".to_string(), memo.to_string());
+            }
+            tokens.insert("kind".to_string(), kind.to_string());
+            if let Some(last_seen) = agent
+                .last_seen_ts
+                .as_deref()
+                .and_then(remote_relative_time)
+            {
+                tokens.insert("last_seen".to_string(), last_seen);
+            }
+            if let Some(context) = agent.context_usage.clone() {
+                tokens.insert("context".to_string(), context);
+            }
             let rows = crate::ui::sidebar_agent_rows(
                 &config.agents,
                 crate::ui::AgentTokenContext {
-                    machine: Some(host.as_str()),
+                    machine: agent.host.as_deref(),
                     workspace: &agent.project,
                     tab: Some(agent.lane.as_str()),
                     pane: None,
                     agent_label: Some(label.as_str()),
                     terminal_title: None,
                     terminal_title_stripped: None,
-                    canonical_agent: None,
+                    canonical_agent,
                     tokens: &tokens,
                 },
                 sidebar_status_text(status),
@@ -625,6 +625,111 @@ fn remote_agent_rows<'a>(
                 rows,
             }
         })
+}
+
+/// Presence project identity is the only stable kind signal currently on the
+/// read-only feed: `herm` is the HRM fleet; project-user sessions are Pi.
+fn remote_agent_kind(agent: &crate::protocol::ClientShellRemoteAgent) -> &'static str {
+    if agent.project == "herm" {
+        "HRM"
+    } else {
+        "Pi"
+    }
+}
+
+/// Format presence freshness without claiming that it is a mailbox message.
+/// Invalid timestamps are omitted; this keeps old/partial feeds honest.
+fn remote_relative_time(timestamp: &str) -> Option<String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()?
+        .as_secs() as i64;
+    remote_relative_time_at(timestamp, now)
+}
+
+fn remote_relative_time_at(timestamp: &str, now: i64) -> Option<String> {
+    let seen = parse_rfc3339_seconds(timestamp)?;
+    let age = now.saturating_sub(seen).max(0);
+    let value = if age < 60 {
+        format!("{age}s")
+    } else if age < 3_600 {
+        format!("{}m", age / 60)
+    } else if age < 86_400 {
+        format!("{}h", age / 3_600)
+    } else {
+        format!("{}d", age / 86_400)
+    };
+    Some(format!("{value} ago"))
+}
+
+/// Minimal RFC3339 parser for presence timestamps. Keeping this local avoids
+/// making the endpoint protocol depend on a parser feature just for a token.
+fn parse_rfc3339_seconds(timestamp: &str) -> Option<i64> {
+    fn digits(value: &[u8]) -> Option<i64> {
+        value.iter().try_fold(0_i64, |acc, digit| {
+            digit
+                .is_ascii_digit()
+                .then_some(acc * 10 + i64::from(digit - b'0'))
+        })
+    }
+    let bytes = timestamp.as_bytes();
+    if bytes.len() < 20
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes[10] != b'T'
+        || bytes[13] != b':'
+        || bytes[16] != b':'
+    {
+        return None;
+    }
+    let year = digits(&bytes[0..4])?;
+    let month = digits(&bytes[5..7])?;
+    let day = digits(&bytes[8..10])?;
+    let hour = digits(&bytes[11..13])?;
+    let minute = digits(&bytes[14..16])?;
+    let second = digits(&bytes[17..19])?;
+    if !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 60
+    {
+        return None;
+    }
+    let mut index = 19;
+    while bytes.get(index).is_some_and(|byte| byte.is_ascii_digit()) {
+        index += 1;
+    }
+    let offset = match bytes.get(index) {
+        Some(b'Z') if index + 1 == bytes.len() => 0_i64,
+        Some(sign @ (b'+' | b'-')) if index + 6 == bytes.len() && bytes[index + 3] == b':' => {
+            let hours = digits(&bytes[index + 1..index + 3])?;
+            let minutes = digits(&bytes[index + 4..index + 6])?;
+            if hours > 23 || minutes > 59 {
+                return None;
+            }
+            let value = hours * 3_600 + minutes * 60;
+            if *sign == b'+' {
+                value
+            } else {
+                -value
+            }
+        }
+        _ => return None,
+    };
+    // Days from civil (Gregorian), relative to 1970-01-01.
+    let adjusted_year = year - i64::from(month <= 2);
+    let era = (if adjusted_year >= 0 {
+        adjusted_year
+    } else {
+        adjusted_year - 399
+    }) / 400;
+    let year_of_era = adjusted_year - era * 400;
+    let month_from_march = month + if month > 2 { -3 } else { 9 };
+    let day_of_year = (153 * month_from_march + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    let days = era * 146_097 + day_of_era - 719_468;
+    Some(days * 86_400 + hour * 3_600 + minute * 60 + second - offset)
 }
 
 fn remote_agent_status(status: &str) -> crate::api::schema::AgentStatus {
@@ -723,5 +828,58 @@ fn sidebar_status_text(status: crate::api::schema::AgentStatus) -> &'static str 
         AgentStatus::Done => "done",
         AgentStatus::Working => "working",
         AgentStatus::Idle | AgentStatus::Unknown => "idle",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn remote(project: &str) -> crate::protocol::ClientShellRemoteAgent {
+        crate::protocol::ClientShellRemoteAgent {
+            agent_id: "host-project-lane".into(),
+            host: Some("host".into()),
+            project: project.into(),
+            lane: "lane".into(),
+            status: "working".into(),
+            user: project.into(),
+            cwd: None,
+            process_alive: true,
+            stream_alive: true,
+            last_seen_ts: None,
+            session_memo: None,
+            context_usage: None,
+        }
+    }
+
+    #[test]
+    fn remote_kind_maps_project_user_and_hrm_presence_without_guessing_host() {
+        assert_eq!(remote_agent_kind(&remote("slyce")), "Pi");
+        assert_eq!(remote_agent_kind(&remote("herm")), "HRM");
+        let mut missing_host = remote("slyce");
+        missing_host.host = None;
+        assert_eq!(missing_host.host, None);
+    }
+
+    #[test]
+    fn remote_relative_time_handles_fresh_future_and_bad_timestamps() {
+        assert_eq!(
+            remote_relative_time_at("2026-09-14T00:00:00Z", 1_789_344_000),
+            Some("0s ago".into())
+        );
+        assert_eq!(
+            remote_relative_time_at("2026-09-14T01:00:00+01:00", 1_789_344_000),
+            Some("0s ago".into())
+        );
+        assert_eq!(remote_relative_time_at("not-a-time", 0), None);
+    }
+
+    #[test]
+    fn remote_context_usage_projection_preserves_absence() {
+        let mut agent = remote("slyce");
+        agent.context_usage = Some("25%".into());
+        assert_eq!(agent.context_usage.as_deref(), Some("25%"));
+        agent.context_usage = None;
+        assert_eq!(agent.context_usage, None);
     }
 }

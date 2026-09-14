@@ -48,6 +48,12 @@ pub struct PresenceRow {
     pub idle: Option<bool>,
     #[serde(default)]
     pub session_memo: Option<String>,
+    /// Structured heartbeat runtime/context are intentionally opaque. The
+    /// sidebar only derives explicitly named display values from them.
+    #[serde(default)]
+    pub runtime: Option<serde_json::Value>,
+    #[serde(default)]
+    pub context: Option<serde_json::Value>,
     // Deliberately NOT deserialized: pane_id / session_id / control token.
 }
 
@@ -61,6 +67,7 @@ struct PresenceEnvelope {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct RemoteAgent {
     pub agent_id: String,
+    pub host: Option<String>,
     pub project: String,
     pub lane: String,
     pub status: String,
@@ -72,6 +79,35 @@ pub struct RemoteAgent {
     pub lifecycle: Option<String>,
     pub idle: Option<bool>,
     pub session_memo: Option<String>,
+    pub context_usage: Option<String>,
+}
+
+fn context_usage(row: &PresenceRow) -> Option<String> {
+    let objects = [row.context.as_ref(), row.runtime.as_ref()];
+    for object in objects.into_iter().flatten() {
+        let Some(object) = object.as_object() else {
+            continue;
+        };
+        if let (Some(used), Some(limit)) = (
+            object.get("context_used").and_then(serde_json::Value::as_u64),
+            object.get("context_limit").and_then(serde_json::Value::as_u64),
+        ) {
+            if let Some(percent) = used.saturating_mul(100).checked_div(limit) {
+                return Some(format!("{percent}%"));
+            }
+        }
+        for key in ["context_percent", "percent"] {
+            if let Some(value) = object.get(key) {
+                if let Some(value) = value.as_u64() {
+                    return Some(format!("{value}%"));
+                }
+                if let Some(value) = value.as_str().filter(|value| !value.is_empty()) {
+                    return Some(value.to_string());
+                }
+            }
+        }
+    }
+    None
 }
 
 impl PresenceRow {
@@ -143,8 +179,13 @@ impl RemoteAgent {
             .clone()
             .or_else(|| row.last_status.clone())
             .unwrap_or_else(|| "idle".to_string());
+        let context_usage = context_usage(&row);
         RemoteAgent {
-            user: derive_user(row.project.as_deref(), &row.agent_id),
+            user: row
+                .user
+                .filter(|user| !user.is_empty())
+                .unwrap_or_else(|| derive_user(row.project.as_deref(), &row.agent_id)),
+            host: row.host,
             agent_id: row.agent_id,
             project,
             lane,
@@ -156,6 +197,7 @@ impl RemoteAgent {
             lifecycle: row.lifecycle,
             idle: row.idle,
             session_memo: row.session_memo,
+            context_usage,
         }
     }
 }
@@ -235,6 +277,8 @@ mod tests {
             },
             idle: Some(!alive),
             session_memo: None,
+            runtime: None,
+            context: None,
         }
     }
 
@@ -272,9 +316,12 @@ mod tests {
             lifecycle: Some("active".into()),
             idle: Some(false),
             session_memo: None,
+            runtime: None,
+            context: None,
         };
         let agent = RemoteAgent::from_row(row);
         assert_eq!(agent.project, "slyce");
+        assert_eq!(agent.host.as_deref(), Some("herm-b"));
         assert_eq!(agent.user, "slyce");
         assert_eq!(agent.lane, "perky-e9fb");
         // serde deserialization of RemoteAgent has no pane field; PresenceRow
@@ -287,6 +334,21 @@ mod tests {
             .unwrap()
             .get("session_id")
             .is_none());
+    }
+
+    #[test]
+    fn presence_context_usage_is_projected_without_forwarding_raw_payload() {
+        let mut row = row("herm-b-slyce-perky-e9fb", "slyce", true);
+        row.context = Some(serde_json::json!({
+            "context_used": 50,
+            "context_limit": 200,
+            "depends_on": "D1"
+        }));
+        let agent = RemoteAgent::from_row(row);
+        assert_eq!(agent.context_usage.as_deref(), Some("25%"));
+        let value = serde_json::to_value(agent).unwrap();
+        assert!(value.get("context").is_none());
+        assert!(value.get("runtime").is_none());
     }
 
     #[test]
@@ -319,6 +381,8 @@ mod tests {
             lifecycle: Some("active".into()),
             idle: Some(false),
             session_memo: None,
+            runtime: None,
+            context: None,
         });
         assert_eq!(from_suffix_only_api.lane, "groovy-16be");
         assert_eq!(

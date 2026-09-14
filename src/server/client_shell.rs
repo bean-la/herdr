@@ -245,6 +245,7 @@ pub(super) fn snapshot(
             .iter()
             .map(|agent| protocol::ClientShellRemoteAgent {
                 agent_id: agent.agent_id.clone(),
+                host: agent.host.clone(),
                 project: agent.project.clone(),
                 lane: agent.lane.clone(),
                 status: agent.status.clone(),
@@ -254,6 +255,7 @@ pub(super) fn snapshot(
                 stream_alive: agent.stream_alive,
                 last_seen_ts: agent.last_seen_ts.clone(),
                 session_memo: agent.session_memo.clone(),
+                context_usage: agent.context_usage.clone(),
             })
             .collect(),
         commands: app.client_shell_command_manifest(),

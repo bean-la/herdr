@@ -446,6 +446,7 @@ impl Default for AgentsSidebarConfig {
                     AgentSidebarToken::Machine,
                     AgentSidebarToken::Workspace,
                     AgentSidebarToken::Tab,
+                    AgentSidebarToken::Custom("kind".into()),
                     AgentSidebarToken::Agent,
                 ],
                 vec![
@@ -453,6 +454,7 @@ impl Default for AgentsSidebarConfig {
                     AgentSidebarToken::Custom("think".into()),
                     AgentSidebarToken::Custom("mail".into()),
                     AgentSidebarToken::Custom("last".into()),
+                    AgentSidebarToken::Custom("last_seen".into()),
                 ],
             ],
             rows_by_agent: BTreeMap::new(),
@@ -503,6 +505,7 @@ mod tests {
                     AgentSidebarToken::Machine,
                     AgentSidebarToken::Workspace,
                     AgentSidebarToken::Tab,
+                    AgentSidebarToken::Custom("kind".into()),
                     AgentSidebarToken::Agent,
                 ],
                 vec![
@@ -510,6 +513,7 @@ mod tests {
                     AgentSidebarToken::Custom("think".into()),
                     AgentSidebarToken::Custom("mail".into()),
                     AgentSidebarToken::Custom("last".into()),
+                    AgentSidebarToken::Custom("last_seen".into()),
                 ],
             ]
         );

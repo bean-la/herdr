@@ -74,6 +74,7 @@ mod tests {
     fn remote(id: &str) -> RemoteAgent {
         RemoteAgent {
             agent_id: id.into(),
+            host: Some("herm-b".into()),
             project: "slyce".into(),
             lane: "perky-e9fb".into(),
             status: "idle".into(),
@@ -85,6 +86,7 @@ mod tests {
             lifecycle: Some("active".into()),
             idle: Some(false),
             session_memo: None,
+            context_usage: None,
         }
     }
 

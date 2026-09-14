@@ -299,6 +299,23 @@ rows = [[{ token = "workspace", rules = [{ equals = "long-workspace-name", fg = 
     }
 
     #[test]
+    fn local_agents_resolve_configured_multi_line_rows() {
+        let config = AgentsSidebarConfig {
+            rows: vec![
+                vec![AgentSidebarToken::StateIcon, AgentSidebarToken::Workspace],
+                vec![AgentSidebarToken::StateText, AgentSidebarToken::Agent],
+            ],
+            ..Default::default()
+        };
+        let rows = agent_rows(&config, context(&entry()), "working");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].len(), 2);
+        assert_eq!(rows[1].len(), 2);
+        assert_eq!(rows[1][0].kind, ResolvedTokenKind::StateText("working".into()));
+        assert_eq!(rows[1][1].kind, ResolvedTokenKind::Agent("pi".into()));
+    }
+
+    #[test]
     fn custom_numeric_rules_resolve_in_agent_overrides_and_space_rows() {
         let config: crate::config::SidebarConfig = toml::from_str(
             r#"

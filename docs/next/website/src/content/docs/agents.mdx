@@ -137,6 +137,10 @@ herdr pane report-metadata w1:p1 \
 
 Agent sidebar rows can also opt into `terminal_title` or `terminal_title_stripped`; neither appears in the default rows. The first shows the latest safety-normalized OSC 0/2 terminal title. The second removes one recognized leading activity or spinner glyph and following whitespace. Herdr owns these values on the server; they are ephemeral across a cold restart and remain independent of metadata titles and semantic agent state. Spinner animation can therefore update the raw title without producing a pane update when the stripped text stays the same.
 
+Remote presence rows use the same configured multi-line layout as local rows. In addition to the usual `machine`, `workspace`, `tab`, `agent`, and `state_text` values, the default layout can show `$kind` (`Pi` for project-user sessions and `HRM` for the `herm` project) and `$last_seen` when the presence feed supplies a valid timestamp. `$context` is populated only when the feed contains an explicit context-usage value. Mailbox state and last-message time are not part of the presence wire response, so those tokens remain absent rather than displaying guessed or stale values. Remote rows are read-only and are never click targets.
+
+The agent-panel `remotes`/`local` selector remains available for both direct and multi-machine clients: it filters rows from each endpoint snapshot. Multi-machine rendering keeps local pane ordering and appends endpoint remote-presence rows, so the selector is effective on laptop clients as well as on VPS clients. It is intentionally not removed merely because a current snapshot has no remote rows; presence can arrive on a later refresh.
+
 ## Attach directly to an agent
 
 Attach your current terminal to one agent terminal instead of the full Herdr UI:

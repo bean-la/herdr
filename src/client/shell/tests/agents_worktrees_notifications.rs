@@ -809,6 +809,7 @@ fn agent_remotes_toggle_hides_presence_and_persists_per_endpoint() {
     projected.workspaces[0].label = "herm".into();
     projected.remote_agents = vec![crate::protocol::ClientShellRemoteAgent {
         agent_id: "sebluair-herm-groovy-16be".into(),
+        host: Some("sebluair".into()),
         project: "herm".into(),
         lane: "groovy-16be".into(),
         status: "idle".into(),
@@ -818,10 +819,13 @@ fn agent_remotes_toggle_hides_presence_and_persists_per_endpoint() {
         stream_alive: true,
         last_seen_ts: None,
         session_memo: None,
+        context_usage: None,
     }];
     let config =
         ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone());
     let mut state = ClientShellState::new(config);
+    state.config.sidebar_max_width = 100;
+    state.sidebar_width = 60;
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
     let shown = state.compose(106, 30).expect("remotes visible sidebar");
@@ -839,6 +843,7 @@ fn agent_remotes_toggle_hides_presence_and_persists_per_endpoint() {
         shown_text.contains("groovy-16be"),
         "ad-hoc presence should keep the nickname, not only the suffix: {shown_text}"
     );
+    assert!(shown_text.contains("HRM"), "herm presence should be labeled HRM: {shown_text}");
     let toggle = state.hits.agent_remotes_toggle;
     let click = state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
@@ -1482,6 +1487,7 @@ fn semantic_notifications_use_client_policy_and_stable_navigation_targets() {
 fn remote_presence_agent() -> crate::protocol::ClientShellRemoteAgent {
     crate::protocol::ClientShellRemoteAgent {
         agent_id: "herm-b-slyce-perky".into(),
+        host: Some("herm-b".into()),
         project: "slyce".into(),
         lane: "perky-e9fb".into(),
         status: "idle".into(),
@@ -1491,6 +1497,7 @@ fn remote_presence_agent() -> crate::protocol::ClientShellRemoteAgent {
         stream_alive: true,
         last_seen_ts: None,
         session_memo: None,
+        context_usage: None,
     }
 }
 
@@ -1515,6 +1522,8 @@ fn remote_presence_rows_render_without_click_targets() {
     });
     projected.remote_agents = vec![remote_presence_agent()];
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.config.sidebar_max_width = 100;
+    state.sidebar_width = 60;
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
     let frame = state.compose(106, 30).expect("presence sidebar frame");
@@ -1673,6 +1682,8 @@ fn remote_presence_rows_remain_visible_when_scope_filters_local_agents() {
     let mut config = Config::default();
     config.ui.agent_panel_scope = crate::config::AgentPanelScopeConfig::ActiveWorkspace;
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.config.sidebar_max_width = 100;
+    state.sidebar_width = 60;
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
     let frame = state.compose(106, 30).expect("scoped presence sidebar");
@@ -1703,6 +1714,8 @@ fn remote_presence_rows_hide_other_projects_in_here_scope() {
     let mut config = Config::default();
     config.ui.agent_panel_scope = crate::config::AgentPanelScopeConfig::ActiveWorkspace;
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.config.sidebar_max_width = 100;
+    state.sidebar_width = 60;
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
     let frame = state.compose(106, 30).expect("scoped presence sidebar");
@@ -1772,6 +1785,7 @@ fn lane_tab_fallback_rows_show_workspace_tabs_without_detected_agents() {
     ];
     projected.remote_agents.push(crate::protocol::ClientShellRemoteAgent {
         agent_id: "herm-b-slyce-goaldaddy".into(),
+        host: Some("herm-b".into()),
         project: "slyce".into(),
         lane: "goaldaddy".into(),
         status: "idle".into(),
@@ -1781,6 +1795,7 @@ fn lane_tab_fallback_rows_show_workspace_tabs_without_detected_agents() {
         stream_alive: true,
         last_seen_ts: None,
         session_memo: None,
+        context_usage: None,
     });
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     state.set_snapshot(Box::new(projected));
@@ -1816,6 +1831,7 @@ fn cross_host_presence_rows_label_host_and_lane() {
     projected.workspaces[0].label = "slyce".into();
     projected.remote_agents = vec![crate::protocol::ClientShellRemoteAgent {
         agent_id: "sebluair-slyce-moody-34e8".into(),
+        host: Some("sebluair".into()),
         project: "slyce".into(),
         lane: "moody-34e8".into(),
         status: "idle".into(),
@@ -1825,8 +1841,11 @@ fn cross_host_presence_rows_label_host_and_lane() {
         stream_alive: true,
         last_seen_ts: None,
         session_memo: None,
+        context_usage: None,
     }];
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.config.sidebar_max_width = 100;
+    state.sidebar_width = 60;
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
     let frame = state.compose(106, 30).expect("cross-host presence sidebar");
