@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+      - "brndr-v*"
 
 permissions:
   contents: read
@@ -14,7 +15,7 @@ env:
 
 jobs:
   flake-check:
-    if: github.repository == 'herdrdev/herdr'
+    if: ((github.repository == 'herdrdev/herdr' && startsWith(github.ref_name, 'v')) || (github.repository == 'bean-la/herdr' && startsWith(github.ref_name, 'brndr-v')))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,7 +38,7 @@ jobs:
           nix flake check --all-systems --no-build --print-build-logs
 
   build:
-    if: github.repository == 'herdrdev/herdr'
+    if: ((github.repository == 'herdrdev/herdr' && startsWith(github.ref_name, 'v')) || (github.repository == 'bean-la/herdr' && startsWith(github.ref_name, 'brndr-v')))
     permissions:
       contents: read
     strategy:
@@ -166,7 +167,7 @@ jobs:
           path: ${{ matrix.name }}
 
   validate-release-inputs:
-    if: github.repository == 'herdrdev/herdr'
+    if: ((github.repository == 'herdrdev/herdr' && startsWith(github.ref_name, 'v')) || (github.repository == 'bean-la/herdr' && startsWith(github.ref_name, 'brndr-v')))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -195,7 +196,7 @@ jobs:
 
   release:
     needs: [build, flake-check, validate-release-inputs]
-    if: github.repository == 'herdrdev/herdr'
+    if: ((github.repository == 'herdrdev/herdr' && startsWith(github.ref_name, 'v')) || (github.repository == 'bean-la/herdr' && startsWith(github.ref_name, 'brndr-v')))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -224,7 +225,7 @@ jobs:
 
   update-nix-package:
     needs: release
-    if: github.repository == 'herdrdev/herdr'
+    if: ((github.repository == 'herdrdev/herdr' && startsWith(github.ref_name, 'v')) || (github.repository == 'bean-la/herdr' && startsWith(github.ref_name, 'brndr-v')))
     runs-on: ubuntu-latest
     timeout-minutes: 2
     continue-on-error: true
@@ -243,7 +244,7 @@ jobs:
 
   close-released-issues:
     needs: release
-    if: github.repository == 'herdrdev/herdr'
+    if: ((github.repository == 'herdrdev/herdr' && startsWith(github.ref_name, 'v')) || (github.repository == 'bean-la/herdr' && startsWith(github.ref_name, 'brndr-v')))
     runs-on: ubuntu-latest
     continue-on-error: true
     permissions:
@@ -380,7 +381,7 @@ jobs:
 
   update-latest-json:
     needs: release
-    if: github.repository == 'herdrdev/herdr'
+    if: ((github.repository == 'herdrdev/herdr' && startsWith(github.ref_name, 'v')) || (github.repository == 'bean-la/herdr' && startsWith(github.ref_name, 'brndr-v')))
     runs-on: ubuntu-latest
     concurrency:
       group: docs-publish-master
