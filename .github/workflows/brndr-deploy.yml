@@ -112,7 +112,6 @@ jobs:
   # toolchain), with the patched brew zig (see Install step).
   build-macos:
     name: Build macOS (brndr-latest release)
-    needs: build-publish-linux
     strategy:
       matrix:
         include:
