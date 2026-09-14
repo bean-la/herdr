@@ -446,10 +446,10 @@ impl Default for AgentsSidebarConfig {
                     AgentSidebarToken::Machine,
                     AgentSidebarToken::Workspace,
                     AgentSidebarToken::Tab,
-                    AgentSidebarToken::Custom("kind".into()),
-                    AgentSidebarToken::Agent,
                 ],
+                vec![AgentSidebarToken::Agent],
                 vec![
+                    AgentSidebarToken::Custom("kind".into()),
                     AgentSidebarToken::Custom("context".into()),
                     AgentSidebarToken::Custom("think".into()),
                     AgentSidebarToken::Custom("mail".into()),
@@ -495,7 +495,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_match_the_compact_agent_and_existing_space_layouts() {
+    fn defaults_match_the_two_row_agent_and_existing_space_layouts() {
         let config = SidebarConfig::default();
         assert_eq!(
             config.agents.rows,
@@ -505,10 +505,10 @@ mod tests {
                     AgentSidebarToken::Machine,
                     AgentSidebarToken::Workspace,
                     AgentSidebarToken::Tab,
-                    AgentSidebarToken::Custom("kind".into()),
-                    AgentSidebarToken::Agent,
                 ],
+                vec![AgentSidebarToken::Agent],
                 vec![
+                    AgentSidebarToken::Custom("kind".into()),
                     AgentSidebarToken::Custom("context".into()),
                     AgentSidebarToken::Custom("think".into()),
                     AgentSidebarToken::Custom("mail".into()),
