@@ -120,8 +120,8 @@ pub(super) fn render_agent_panel_header(
     }
 
     let sort_label = match config.agent_panel_sort {
-        crate::config::AgentPanelSortConfig::Spaces => "grp",
-        crate::config::AgentPanelSortConfig::Priority => "priority",
+        crate::config::AgentPanelSortConfig::Spaces => "grpd",
+        crate::config::AgentPanelSortConfig::Priority => "prio",
     };
     let scope_label = agent_panel_scope_label(config.agent_panel_scope);
     let remotes_label = agent_panel_remotes_label(config.agent_panel_remotes);
