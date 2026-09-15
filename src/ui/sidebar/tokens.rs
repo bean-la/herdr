@@ -519,6 +519,17 @@ rows = [[{ token = "$load", rules = [{ lt = 50, hide = true }] }], ["workspace"]
             ))]
         );
 
+        entry.tab = Some("1".into());
+        entry.agent_label = Some("perky-b76d".into());
+        let rows = agent_rows(&AgentsSidebarConfig::default(), context(&entry), "idle");
+        assert_eq!(
+            rows[1],
+            vec![
+                ResolvedToken::unstyled(ResolvedTokenKind::Tab("1".into())),
+                ResolvedToken::unstyled(ResolvedTokenKind::Agent("perky-b76d".into())),
+            ]
+        );
+
         let mut remote = context(&entry);
         remote.machine = Some("sebluair");
         let rows = agent_rows(&AgentsSidebarConfig::default(), remote, "idle");

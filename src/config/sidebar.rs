@@ -448,6 +448,7 @@ impl Default for AgentsSidebarConfig {
                 ],
                 vec![
                     AgentSidebarToken::Tab,
+                    AgentSidebarToken::Agent,
                     AgentSidebarToken::Custom("context".into()),
                 ],
             ],
@@ -501,6 +502,7 @@ mod tests {
                 ],
                 vec![
                     AgentSidebarToken::Tab,
+                    AgentSidebarToken::Agent,
                     AgentSidebarToken::Custom("context".into()),
                 ],
             ]

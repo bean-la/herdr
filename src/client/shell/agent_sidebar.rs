@@ -340,22 +340,6 @@ fn agent_identity_label(agent: &crate::protocol::ClientShellAgent) -> Option<&st
         .filter(|label| !label.is_empty() && *label != "pi")
 }
 
-/// Named lane tabs win. Auto-numbered tabs ("1") yield to the reported lane.
-fn sidebar_tab_token<'a>(
-    tab: Option<&'a crate::protocol::ClientShellTab>,
-    agent_label: Option<&'a str>,
-) -> Option<&'a str> {
-    if let Some(tab) = tab {
-        if tab.custom_label && !tab.label.is_empty() {
-            return Some(tab.label.as_str());
-        }
-    }
-    agent_label.or_else(|| {
-        tab.map(|tab| tab.label.as_str())
-            .filter(|label| !label.chars().all(|ch| ch.is_ascii_digit()))
-    })
-}
-
 fn primary_pane_for_tab<'a>(
     snapshot: &'a ClientShellSnapshot,
     workspace_id: &str,
@@ -419,7 +403,7 @@ fn lane_tab_agent_rows(
                     workspace: &workspace.label,
                     tab: tab_label,
                     pane: pane.label.as_deref(),
-                    agent_label: Some(tab.label.as_str()),
+                    agent_label: None,
                     terminal_title: None,
                     terminal_title_stripped: None,
                     canonical_agent: None,
@@ -547,8 +531,8 @@ pub(super) fn agent_rows(
                 .panes
                 .iter()
                 .find(|pane| pane.pane_id == agent.pane_id);
-            let agent_label = agent_identity_label(agent);
-            let tab_label = sidebar_tab_token(tab, agent_label);
+            let tab_label = tab.map(|tab| tab.label.as_str());
+            let agent_label = agent_identity_label(agent).filter(|label| Some(*label) != tab_label);
             let labels = agent
                 .state_labels
                 .iter()
@@ -613,7 +597,6 @@ fn remote_agent_rows<'a>(
         })
         .map(|agent| {
             let status = remote_agent_status(&agent.status);
-            let label = agent.lane.as_str();
             let kind = remote_agent_kind(agent);
             let canonical_agent = (kind == "Pi").then_some(crate::detect::Agent::Pi);
             let mut tokens = HashMap::new();
@@ -642,7 +625,7 @@ fn remote_agent_rows<'a>(
                     workspace: &agent.project,
                     tab: Some(agent.lane.as_str()),
                     pane: None,
-                    agent_label: Some(label),
+                    agent_label: None,
                     terminal_title: None,
                     terminal_title_stripped: None,
                     canonical_agent,
