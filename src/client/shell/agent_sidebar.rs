@@ -310,6 +310,52 @@ fn workspace_has_lane_tab(
         .any(|tab| tab.label == lane)
 }
 
+fn local_agent_has_lane(
+    snapshot: &ClientShellSnapshot,
+    project: &str,
+    lane: &str,
+) -> bool {
+    snapshot.agents.iter().any(|agent| {
+        let Some(workspace) = snapshot
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.workspace_id == agent.workspace_id)
+        else {
+            return false;
+        };
+        if workspace.label != project {
+            return false;
+        }
+        agent_identity_label(agent) == Some(lane)
+    })
+}
+
+fn agent_identity_label(agent: &crate::protocol::ClientShellAgent) -> Option<&str> {
+    agent
+        .display_agent
+        .as_deref()
+        .or(agent.name.as_deref())
+        .or(agent.agent.as_deref())
+        .or(agent.title.as_deref())
+        .filter(|label| !label.is_empty() && *label != "pi")
+}
+
+/// Named lane tabs win. Auto-numbered tabs ("1") yield to the reported lane.
+fn sidebar_tab_token<'a>(
+    tab: Option<&'a crate::protocol::ClientShellTab>,
+    agent_label: Option<&'a str>,
+) -> Option<&'a str> {
+    if let Some(tab) = tab {
+        if tab.custom_label && !tab.label.is_empty() {
+            return Some(tab.label.as_str());
+        }
+    }
+    agent_label.or_else(|| {
+        tab.map(|tab| tab.label.as_str())
+            .filter(|label| !label.chars().all(|ch| ch.is_ascii_digit()))
+    })
+}
+
 fn primary_pane_for_tab<'a>(
     snapshot: &'a ClientShellSnapshot,
     workspace_id: &str,
@@ -501,13 +547,8 @@ pub(super) fn agent_rows(
                 .panes
                 .iter()
                 .find(|pane| pane.pane_id == agent.pane_id);
-            let tab_label = tab.map(|tab| tab.label.as_str());
-            let agent_label = agent
-                .display_agent
-                .as_deref()
-                .or(agent.name.as_deref())
-                .or(agent.agent.as_deref())
-                .or(agent.title.as_deref());
+            let agent_label = agent_identity_label(agent);
+            let tab_label = sidebar_tab_token(tab, agent_label);
             let labels = agent
                 .state_labels
                 .iter()
@@ -568,6 +609,7 @@ fn remote_agent_rows<'a>(
         })
         .filter(|agent| {
             !workspace_has_lane_tab(snapshot, agent.project.as_str(), agent.lane.as_str())
+                && !local_agent_has_lane(snapshot, agent.project.as_str(), agent.lane.as_str())
         })
         .map(|agent| {
             let status = remote_agent_status(&agent.status);

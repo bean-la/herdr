@@ -1885,7 +1885,7 @@ fn cross_host_presence_rows_label_host_and_lane() {
 fn single_tab_project_user_keeps_workspace_and_lane_on_two_rows() {
     let mut projected = snapshot();
     projected.workspaces[0].label = "slyce".into();
-    projected.tabs[0].label = "goaldaddy".into();
+    projected.tabs[0].label = "1".into();
     projected.tabs[0].custom_label = false;
     projected.agents.push(ClientShellAgent {
         pane_id: "pane_1".into(),
@@ -1893,7 +1893,7 @@ fn single_tab_project_user_keeps_workspace_and_lane_on_two_rows() {
         tab_id: "tab_1".into(),
         name: None,
         display_agent: None,
-        agent: None,
+        agent: Some("perky-b76d".into()),
         title: None,
         terminal_title: None,
         terminal_title_stripped: None,
@@ -1924,11 +1924,11 @@ fn single_tab_project_user_keeps_workspace_and_lane_on_two_rows() {
         "project users should keep the workspace on row one: {text}"
     );
     assert!(
-        text.contains("goaldaddy"),
-        "a single auto-named tab still belongs on row two: {text}"
+        text.contains("perky-b76d"),
+        "an auto-numbered tab should show the reported lane on row two: {text}"
     );
     assert!(
-        !text.contains("slyce · goaldaddy"),
+        !text.contains("slyce · perky-b76d"),
         "identity must not collapse onto one truncated row: {text}"
     );
 }
