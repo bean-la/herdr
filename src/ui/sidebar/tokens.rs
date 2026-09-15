@@ -499,6 +499,25 @@ rows = [[{ token = "$load", rules = [{ lt = 50, hide = true }] }], ["workspace"]
     }
 
     #[test]
+    fn default_two_row_layout_keeps_tab_when_context_is_missing() {
+        let mut entry = entry();
+        entry.tab = Some("goaldaddy".into());
+        entry.agent_label = None;
+        let rows = agent_rows(&AgentsSidebarConfig::default(), context(&entry), "idle");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[0][1],
+            ResolvedToken::unstyled(ResolvedTokenKind::Workspace("repo".into()))
+        );
+        assert_eq!(
+            rows[1],
+            vec![ResolvedToken::unstyled(ResolvedTokenKind::Tab(
+                "goaldaddy".into()
+            ))]
+        );
+    }
+
+    #[test]
     fn terminal_title_builtins_are_distinct_from_custom_tokens() {
         let mut entry = entry();
         entry.terminal_title = Some("⠋ raw title".into());

@@ -443,17 +443,11 @@ impl Default for AgentsSidebarConfig {
             rows: vec![
                 vec![
                     AgentSidebarToken::StateIcon,
-                    AgentSidebarToken::Machine,
                     AgentSidebarToken::Workspace,
-                    AgentSidebarToken::Tab,
                 ],
                 vec![
+                    AgentSidebarToken::Tab,
                     AgentSidebarToken::Custom("context".into()),
-                    AgentSidebarToken::Custom("mailbox".into()),
-                    AgentSidebarToken::Custom("presence".into()),
-                    AgentSidebarToken::Custom("model".into()),
-                    AgentSidebarToken::Custom("kind".into()),
-                    AgentSidebarToken::Custom("last_seen".into()),
                 ],
             ],
             rows_by_agent: BTreeMap::new(),
@@ -501,17 +495,11 @@ mod tests {
             vec![
                 vec![
                     AgentSidebarToken::StateIcon,
-                    AgentSidebarToken::Machine,
                     AgentSidebarToken::Workspace,
-                    AgentSidebarToken::Tab,
                 ],
                 vec![
+                    AgentSidebarToken::Tab,
                     AgentSidebarToken::Custom("context".into()),
-                    AgentSidebarToken::Custom("mailbox".into()),
-                    AgentSidebarToken::Custom("presence".into()),
-                    AgentSidebarToken::Custom("model".into()),
-                    AgentSidebarToken::Custom("kind".into()),
-                    AgentSidebarToken::Custom("last_seen".into()),
                 ],
             ]
         );

@@ -354,7 +354,6 @@ fn lane_tab_agent_rows(
             .filter(|tab| tab.workspace_id == workspace.workspace_id)
             .collect::<Vec<_>>();
         tabs.sort_by_key(|tab| tab.number);
-        let tab_count = tabs.len();
         for tab in tabs {
             let Some(pane) = primary_pane_for_tab(snapshot, &workspace.workspace_id, &tab.tab_id)
             else {
@@ -366,8 +365,7 @@ fn lane_tab_agent_rows(
             if !live_presence_covers_lane(snapshot, workspace.label.as_str(), tab.label.as_str()) {
                 continue;
             }
-            let tab_label = (tab_count > 1 || tab.custom_label)
-                .then_some(tab.label.as_str());
+            let tab_label = Some(tab.label.as_str());
             let ui_rows = crate::ui::sidebar_agent_rows(
                 &config.agents,
                 crate::ui::AgentTokenContext {
@@ -503,14 +501,7 @@ pub(super) fn agent_rows(
                 .panes
                 .iter()
                 .find(|pane| pane.pane_id == agent.pane_id);
-            let tab_count = snapshot
-                .tabs
-                .iter()
-                .filter(|candidate| candidate.workspace_id == agent.workspace_id)
-                .count();
-            let tab_label = tab
-                .filter(|tab| tab_count > 1 || tab.custom_label)
-                .map(|tab| tab.label.as_str());
+            let tab_label = tab.map(|tab| tab.label.as_str());
             let agent_label = agent
                 .display_agent
                 .as_deref()
@@ -580,7 +571,7 @@ fn remote_agent_rows<'a>(
         })
         .map(|agent| {
             let status = remote_agent_status(&agent.status);
-            let label = format!("{} · {}", agent.project, agent.lane);
+            let label = agent.lane.as_str();
             let kind = remote_agent_kind(agent);
             let canonical_agent = (kind == "Pi").then_some(crate::detect::Agent::Pi);
             let mut tokens = HashMap::new();
@@ -609,7 +600,7 @@ fn remote_agent_rows<'a>(
                     workspace: &agent.project,
                     tab: Some(agent.lane.as_str()),
                     pane: None,
-                    agent_label: Some(label.as_str()),
+                    agent_label: Some(label),
                     terminal_title: None,
                     terminal_title_stripped: None,
                     canonical_agent,
