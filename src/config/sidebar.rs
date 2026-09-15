@@ -444,6 +444,7 @@ impl Default for AgentsSidebarConfig {
                 vec![
                     AgentSidebarToken::StateIcon,
                     AgentSidebarToken::Workspace,
+                    AgentSidebarToken::Machine,
                 ],
                 vec![
                     AgentSidebarToken::Tab,
@@ -496,6 +497,7 @@ mod tests {
                 vec![
                     AgentSidebarToken::StateIcon,
                     AgentSidebarToken::Workspace,
+                    AgentSidebarToken::Machine,
                 ],
                 vec![
                     AgentSidebarToken::Tab,

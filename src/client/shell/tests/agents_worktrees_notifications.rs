@@ -1868,8 +1868,8 @@ fn cross_host_presence_rows_label_host_and_lane() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        text.contains("slyce"),
-        "cross-host presence should show the project on row one: {text}"
+        text.contains("slyce · sebluair"),
+        "cross-host presence should show host after the project on row one: {text}"
     );
     assert!(
         text.contains("moody-34e8"),

@@ -506,14 +506,25 @@ rows = [[{ token = "$load", rules = [{ lt = 50, hide = true }] }], ["workspace"]
         let rows = agent_rows(&AgentsSidebarConfig::default(), context(&entry), "idle");
         assert_eq!(rows.len(), 2);
         assert_eq!(
-            rows[0][1],
-            ResolvedToken::unstyled(ResolvedTokenKind::Workspace("repo".into()))
+            rows[0],
+            vec![
+                ResolvedToken::unstyled(ResolvedTokenKind::StateIcon),
+                ResolvedToken::unstyled(ResolvedTokenKind::Workspace("repo".into())),
+            ]
         );
         assert_eq!(
             rows[1],
             vec![ResolvedToken::unstyled(ResolvedTokenKind::Tab(
                 "goaldaddy".into()
             ))]
+        );
+
+        let mut remote = context(&entry);
+        remote.machine = Some("sebluair");
+        let rows = agent_rows(&AgentsSidebarConfig::default(), remote, "idle");
+        assert_eq!(
+            rows[0][2],
+            ResolvedToken::unstyled(ResolvedTokenKind::Machine("sebluair".into()))
         );
     }
 
