@@ -37,7 +37,7 @@ log "fetch origin settled-merge-v0.8.0 in ${FORK}"
 git -C "$FORK" fetch bean-la settled-merge-v0.8.0
 if [[ -d "$WORKTREE" ]]; then
   log "worktree exists at $WORKTREE — checking out $SHA (detached)"
-  git -C "$WORKTREE" checkout -q --detach "$SHA" 2>/dev/null || true
+  git -C "$WORKTREE" checkout -q --detach "$SHA"
 else
   git -C "$FORK" worktree add --detach "$WORKTREE" "$SHA"
 fi
