@@ -119,6 +119,8 @@ pub enum ResponseResult {
     },
     PaneList {
         panes: Vec<PaneInfo>,
+        #[serde(default)]
+        pinned: Vec<PaneInfo>,
     },
     PaneCurrent {
         pane: PaneInfo,
