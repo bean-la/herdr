@@ -89,8 +89,12 @@ fn context_usage(row: &PresenceRow) -> Option<String> {
             continue;
         };
         if let (Some(used), Some(limit)) = (
-            object.get("context_used").and_then(serde_json::Value::as_u64),
-            object.get("context_limit").and_then(serde_json::Value::as_u64),
+            object
+                .get("context_used")
+                .and_then(serde_json::Value::as_u64),
+            object
+                .get("context_limit")
+                .and_then(serde_json::Value::as_u64),
         ) {
             if let Some(percent) = used.saturating_mul(100).checked_div(limit) {
                 return Some(format!("{percent}%"));
@@ -166,9 +170,7 @@ impl RemoteAgent {
         let project = row.project.clone().unwrap_or_else(|| "herm".to_string());
         let derived = derive_lane(&row.agent_id, row.project.as_deref());
         let lane = match row.lane.as_deref().filter(|lane| !lane.is_empty()) {
-            Some(api_lane)
-                if derived == api_lane || derived.ends_with(&format!("-{api_lane}")) =>
-            {
+            Some(api_lane) if derived == api_lane || derived.ends_with(&format!("-{api_lane}")) => {
                 derived
             }
             Some(api_lane) => api_lane.to_string(),
@@ -235,8 +237,8 @@ fn presence_api_base() -> String {
     if std::path::Path::new("/opt/herm/env/herm-core.env").exists() {
         return "http://127.0.0.1:8787".into();
     }
-    let host = std::env::var("HERM_TAILNET_HOST")
-        .unwrap_or_else(|_| "herm-b.tail94725b.ts.net".into());
+    let host =
+        std::env::var("HERM_TAILNET_HOST").unwrap_or_else(|_| "herm-b.tail94725b.ts.net".into());
     format!("https://{host}:8787")
 }
 

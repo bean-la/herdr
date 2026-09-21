@@ -94,9 +94,9 @@ impl App {
                     .values()
                     .find(|terminal| terminal.id.to_string() == candidate.terminal_id)
                     .is_some_and(|terminal| {
-                    terminal.agent_name.as_deref() == Some(target)
-                        || terminal.effective_agent_label() == Some(target)
-                })
+                        terminal.agent_name.as_deref() == Some(target)
+                            || terminal.effective_agent_label() == Some(target)
+                    })
             })
             .collect();
         if let Some(resolved) = self.single_terminal_match(target, name_matches)? {

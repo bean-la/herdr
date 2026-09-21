@@ -11,7 +11,9 @@ pub(crate) const PANE_GRAPHICS_MAX_INLINE_BYTES_TOTAL: usize = 64 * 1024 * 1024;
 pub(crate) const PANE_GRAPHICS_PRIMARY_LAYER_ID: &str = "primary";
 
 use super::agents::AgentSessionInfo;
-use super::common::{AgentStatus, PaneAgentState, PinnedSide, ReadFormat, ReadSource, SplitDirection};
+use super::common::{
+    AgentStatus, PaneAgentState, PinnedSide, ReadFormat, ReadSource, SplitDirection,
+};
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema, Default,

@@ -275,11 +275,8 @@ pub fn capture(
     terminal_runtimes: &TerminalRuntimeRegistry,
     active: Option<usize>,
     selected: usize,
-    sidebar_width: u16,
-    sidebar_section_split: f32,
-    collapsed_space_keys: std::collections::HashSet<String>,
     pinned: &[crate::pinned::PinnedPane],
-    pinned_panes: &std::collections::HashMap<crate::layout::PaneId, crate::pane::PaneState>
+    pinned_panes: &std::collections::HashMap<crate::layout::PaneId, crate::pane::PaneState>,
 ) -> SessionSnapshot {
     SessionSnapshot {
         version: SNAPSHOT_VERSION,
@@ -290,9 +287,9 @@ pub fn capture(
         pinned: capture_pinned(pinned, pinned_panes, terminals),
         active,
         selected,
-        sidebar_width: Some(sidebar_width),
-        sidebar_section_split: Some(sidebar_section_split),
-        collapsed_space_keys,
+        sidebar_width: None,
+        sidebar_section_split: None,
+        collapsed_space_keys: std::collections::HashSet::new(),
     }
 }
 
@@ -337,14 +334,14 @@ fn capture_pinned(
                             });
                         }
                     }
-                    t.persisted_agent_session.as_ref().map(|session| {
-                        PaneAgentSessionSnapshot {
+                    t.persisted_agent_session
+                        .as_ref()
+                        .map(|session| PaneAgentSessionSnapshot {
                             source: session.source.clone(),
                             agent: session.agent.clone(),
                             kind: session.session_ref.kind,
                             value: session.session_ref.value.clone(),
-                        }
-                    })
+                        })
                 });
                 Some(PaneSnapshot {
                     cwd,
@@ -621,9 +618,6 @@ mod tests {
             terminal_runtimes,
             state.active,
             state.selected,
-            state.sidebar_width,
-            state.sidebar_section_split,
-            state.collapsed_space_keys.clone(),
             &state.pinned,
             &state.pinned_panes,
         )

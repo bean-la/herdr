@@ -42,7 +42,8 @@ impl PinnedPane {
             PinnedSide::Right => {
                 let width = (area.width as f32 * self.ratio)
                     .round()
-                    .clamp(MIN_PIN_WIDTH as f32, MAX_PIN_WIDTH as f32) as u16;
+                    .clamp(MIN_PIN_WIDTH as f32, MAX_PIN_WIDTH as f32)
+                    as u16;
                 if width + MIN_TAB_WIDTH > area.width {
                     return None; // not enough room — hide
                 }
@@ -54,7 +55,8 @@ impl PinnedPane {
             PinnedSide::Down => {
                 let height = (area.height as f32 * self.ratio)
                     .round()
-                    .clamp(MIN_PIN_HEIGHT as f32, MAX_PIN_HEIGHT as f32) as u16;
+                    .clamp(MIN_PIN_HEIGHT as f32, MAX_PIN_HEIGHT as f32)
+                    as u16;
                 if height + MIN_TAB_HEIGHT > area.height {
                     return None; // not enough room — hide
                 }
@@ -102,13 +104,19 @@ mod tests {
     use ratatui::layout::Rect;
 
     fn pin(side: PinnedSide, ratio: f32) -> PinnedPane {
-        PinnedPane { pane_id: crate::layout::PaneId::from_raw(1), side, ratio }
+        PinnedPane {
+            pane_id: crate::layout::PaneId::from_raw(1),
+            side,
+            ratio,
+        }
     }
 
     #[test]
     fn right_pin_respects_ratio_within_content_bounds() {
         // 200-col surface, ratio 0.25 -> 50 cols, tab keeps 150.
-        let (tab, p) = pin(PinnedSide::Right, 0.25).split_area(Rect::new(0, 0, 200, 40)).unwrap();
+        let (tab, p) = pin(PinnedSide::Right, 0.25)
+            .split_area(Rect::new(0, 0, 200, 40))
+            .unwrap();
         assert_eq!(p.width, 50);
         assert_eq!(tab.width, 150);
     }
@@ -116,7 +124,9 @@ mod tests {
     #[test]
     fn right_pin_caps_at_content_max() {
         // 400-col surface, ratio 0.25 would be 100 -> clamped to MAX_PIN_WIDTH 90.
-        let (tab, p) = pin(PinnedSide::Right, 0.25).split_area(Rect::new(0, 0, 400, 40)).unwrap();
+        let (tab, p) = pin(PinnedSide::Right, 0.25)
+            .split_area(Rect::new(0, 0, 400, 40))
+            .unwrap();
         assert_eq!(p.width, 90);
         assert_eq!(tab.width, 310);
     }
@@ -124,7 +134,9 @@ mod tests {
     #[test]
     fn right_pin_raises_to_content_min() {
         // 120-col surface, ratio 0.25 would be 30 -> at MIN_PIN_WIDTH, tab 90.
-        let (tab, p) = pin(PinnedSide::Right, 0.25).split_area(Rect::new(0, 0, 120, 40)).unwrap();
+        let (tab, p) = pin(PinnedSide::Right, 0.25)
+            .split_area(Rect::new(0, 0, 120, 40))
+            .unwrap();
         assert_eq!(p.width, 30);
         assert_eq!(tab.width, 90);
     }
@@ -132,15 +144,22 @@ mod tests {
     #[test]
     fn right_pin_hides_when_surface_too_small() {
         // 60-col surface: min pin 30 + min tab 40 = 70 > 60 -> hide (None).
-        assert!(pin(PinnedSide::Right, 0.25).split_area(Rect::new(0, 0, 60, 40)).is_none());
+        assert!(pin(PinnedSide::Right, 0.25)
+            .split_area(Rect::new(0, 0, 60, 40))
+            .is_none());
         // 69-col surface also hides; 70-col fits exactly.
-        assert!(pin(PinnedSide::Right, 0.25).split_area(Rect::new(0, 0, 69, 40)).is_none());
-        assert!(pin(PinnedSide::Right, 0.25).split_area(Rect::new(0, 0, 70, 40)).is_some());
+        assert!(pin(PinnedSide::Right, 0.25)
+            .split_area(Rect::new(0, 0, 69, 40))
+            .is_none());
+        assert!(pin(PinnedSide::Right, 0.25)
+            .split_area(Rect::new(0, 0, 70, 40))
+            .is_some());
     }
 
     #[test]
     fn split_pinned_area_omits_hidden_pins() {
-        let (main, rects) = split_pinned_area(&[pin(PinnedSide::Right, 0.25)], Rect::new(0, 0, 60, 40));
+        let (main, rects) =
+            split_pinned_area(&[pin(PinnedSide::Right, 0.25)], Rect::new(0, 0, 60, 40));
         assert!(rects.is_empty());
         assert_eq!(main.width, 60); // tab keeps the full surface
     }

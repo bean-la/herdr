@@ -7,14 +7,14 @@ use crate::api::schema::{
     PaneFocusDirectionReason, PaneFocusDirectionResult, PaneInfo, PaneInputSetParams,
     PaneLayoutPane, PaneLayoutParams, PaneLayoutRect, PaneLayoutSnapshot, PaneLayoutSplit,
     PaneListParams, PaneMoveDestination, PaneMoveParams, PaneMoveReason, PaneMoveResult,
-    PaneNeighborParams, PaneNeighborResult, PaneProcessInfo, PaneProcessInfoParams,
+    PaneNeighborParams, PaneNeighborResult, PanePinParams, PaneProcessInfo, PaneProcessInfoParams,
     PaneProcessInfoProcess, PaneReadParams, PaneReadResult, PaneReleaseAgentParams,
     PaneRenameParams, PaneReportAgentParams, PaneReportAgentSessionParams,
     PaneReportMetadataParams, PaneResizeParams, PaneResizeReason, PaneResizeResult,
-    PanePinParams, PaneScrollParams, PaneSelectionReadParams, PaneSendInputParams,
-    PaneSendKeysParams, PaneSendTextParams, PaneSplitParams, PaneSwapParams, PaneSwapReason,
-    PaneSwapResult, PaneTarget, PaneTextPoint, PaneTextRange, PaneUnpinParams, PaneZoomMode,
-    PaneZoomParams, PaneZoomReason, PaneZoomResult, ResponseResult,
+    PaneScrollParams, PaneSelectionReadParams, PaneSendInputParams, PaneSendKeysParams,
+    PaneSendTextParams, PaneSplitParams, PaneSwapParams, PaneSwapReason, PaneSwapResult,
+    PaneTarget, PaneTextPoint, PaneTextRange, PaneUnpinParams, PaneZoomMode, PaneZoomParams,
+    PaneZoomReason, PaneZoomResult, ResponseResult,
 };
 use crate::app::actions::{PaneZoomCommand, PaneZoomNoopReason};
 use crate::app::App;
@@ -1620,11 +1620,14 @@ impl App {
     pub(super) fn handle_pane_read(&mut self, id: String, params: PaneReadParams) -> String {
         // Session-pinned panes are not in any workspace — read them via the
         // alias map + pinned state directly.
-        if let Some(pane_id) = self.state.public_pane_id_aliases.get(&params.pane_id).copied() {
+        if let Some(pane_id) = self
+            .state
+            .public_pane_id_aliases
+            .get(&params.pane_id)
+            .copied()
+        {
             if let Some(pane_state) = self.state.pinned_panes.get(&pane_id) {
-                let Some(runtime) = self
-                    .terminal_runtimes
-                    .get(&pane_state.attached_terminal_id)
+                let Some(runtime) = self.terminal_runtimes.get(&pane_state.attached_terminal_id)
                 else {
                     return pane_not_found(id, &params.pane_id);
                 };

@@ -1,10 +1,9 @@
 use crate::api::schema::{
     EmptyParams, Method, PaneFocusDirectionParams, PaneInputSetParams, PaneMoveParams,
-    PanePinParams, PaneRenameParams, PaneResizeParams, PaneSplitParams, PaneSwapParams,
-    PaneTarget, PaneUnpinParams, PaneZoomParams, Request, TabCreateParams, TabListParams,
-    TabRenameParams, TabTarget, WorkspaceCloseParams, WorkspaceCreateParams,
-    WorkspaceRenameParams, WorkspaceTarget, WorktreeCreateParams, WorktreeListParams,
-    WorktreeOpenParams, WorktreeRemoveParams,
+    PanePinParams, PaneRenameParams, PaneResizeParams, PaneSplitParams, PaneSwapParams, PaneTarget,
+    PaneUnpinParams, PaneZoomParams, Request, TabCreateParams, TabListParams, TabRenameParams,
+    TabTarget, WorkspaceCloseParams, WorkspaceCreateParams, WorkspaceRenameParams, WorkspaceTarget,
+    WorktreeCreateParams, WorktreeListParams, WorktreeOpenParams, WorktreeRemoveParams,
 };
 
 fn print_method_response(id: &'static str, method: Method) -> std::io::Result<i32> {

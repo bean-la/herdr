@@ -78,16 +78,30 @@ fn laptop_remote_presence_rows_use_remote_layout_and_selector() {
     }];
     state.set_endpoint_snapshot(&remote, Box::new(remote_snapshot));
     state.set_pane_surface(surface());
-    let shown = state.compose(100, 30).expect("laptop remote presence sidebar");
+    let shown = state
+        .compose(100, 30)
+        .expect("laptop remote presence sidebar");
     let shown_text = shown
         .cells
         .iter()
         .map(|cell| cell.symbol.as_str())
         .collect::<String>();
-    assert!(shown_text.contains("slyce"), "remote row should be rendered: {shown_text}");
-    assert!(shown_text.contains("Pi"), "remote kind should be rendered: {shown_text}");
-    assert!(shown_text.contains("25%"), "remote context should be rendered: {shown_text}");
-    assert!(shown_text.contains("ago"), "remote last-seen should be rendered: {shown_text}");
+    assert!(
+        shown_text.contains("slyce"),
+        "remote row should be rendered: {shown_text}"
+    );
+    assert!(
+        shown_text.contains("Pi"),
+        "remote kind should be rendered: {shown_text}"
+    );
+    assert!(
+        shown_text.contains("25%"),
+        "remote context should be rendered: {shown_text}"
+    );
+    assert!(
+        shown_text.contains("ago"),
+        "remote last-seen should be rendered: {shown_text}"
+    );
 
     let toggle = state.hits.agent_remotes_toggle;
     assert!(!toggle.is_empty(), "remote selector should be interactive");
@@ -97,13 +111,18 @@ fn laptop_remote_presence_rows_use_remote_layout_and_selector() {
         row: toggle.y,
         modifiers: KeyModifiers::empty(),
     })]);
-    let hidden = state.compose(100, 30).expect("laptop remote presence hidden");
+    let hidden = state
+        .compose(100, 30)
+        .expect("laptop remote presence hidden");
     let hidden_text = hidden
         .cells
         .iter()
         .map(|cell| cell.symbol.as_str())
         .collect::<String>();
-    assert!(!hidden_text.contains("pi-lane"), "selector should hide remotes: {hidden_text}");
+    assert!(
+        !hidden_text.contains("pi-lane"),
+        "selector should hide remotes: {hidden_text}"
+    );
 }
 
 #[test]

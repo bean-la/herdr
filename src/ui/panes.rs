@@ -278,7 +278,7 @@ pub(super) fn resize_tab_panes(
         // Pinned panes render borderless — they are a content sidebar, not a
         // split tile; a border just eats cells the content needs.
         let pane_inner = pane_inner_rect(*rect, Borders::NONE);
-        let inner_rect = stable_terminal_inner_rect(pane_inner, app.pane_scrollbars);
+        let inner_rect = terminal_inner_rect(rt, pane_inner, app.pane_scrollbars);
         rt.resize(
             inner_rect.height,
             inner_rect.width,

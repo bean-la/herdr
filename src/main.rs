@@ -574,7 +574,10 @@ fn main() -> io::Result<()> {
         return client::run_client();
     }
 
-    if matches!(args.get(1).map(String::as_str), Some("update") | Some("upgrade")) {
+    if matches!(
+        args.get(1).map(String::as_str),
+        Some("update") | Some("upgrade")
+    ) {
         let options = match update::parse_self_update_args(&args[2..]) {
             Ok(options) => options,
             Err(err) if err.starts_with("usage:") => {

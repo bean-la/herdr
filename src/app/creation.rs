@@ -372,13 +372,13 @@ impl App {
             .find(|(_, &id)| id == pin.pane_id)
             .map(|(public, _)| public.clone())?;
         let runtime = self.terminal_runtimes.get(&pane.attached_terminal_id);
-        let scroll = runtime
-            .and_then(|rt| rt.scroll_metrics())
-            .map(|metrics| crate::api::schema::PaneScrollInfo {
+        let scroll = runtime.and_then(|rt| rt.scroll_metrics()).map(|metrics| {
+            crate::api::schema::PaneScrollInfo {
                 offset_from_bottom: metrics.offset_from_bottom as u64,
                 max_offset_from_bottom: metrics.max_offset_from_bottom as u64,
                 viewport_rows: metrics.viewport_rows as u64,
-            });
+            }
+        });
         let presentation = terminal.effective_presentation();
         Some(crate::api::schema::PaneInfo {
             pane_id: public_id,
@@ -386,7 +386,9 @@ impl App {
             workspace_id: String::new(), // session-level — not in a workspace
             tab_id: String::new(),
             focused: false,
-            cwd: runtime.and_then(|rt| rt.cwd()).map(|cwd| cwd.display().to_string()),
+            cwd: runtime
+                .and_then(|rt| rt.cwd())
+                .map(|cwd| cwd.display().to_string()),
             foreground_cwd: None,
             label: terminal.manual_label.clone(),
             agent: terminal.effective_agent_label().map(str::to_string),

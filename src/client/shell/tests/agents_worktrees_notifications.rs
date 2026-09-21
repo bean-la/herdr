@@ -1643,7 +1643,9 @@ fn here_scope_uses_focused_agent_workspace_when_focused_workspace_id_is_stale() 
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
-    let frame = state.compose(106, 30).expect("stale focused workspace scope");
+    let frame = state
+        .compose(106, 30)
+        .expect("stale focused workspace scope");
     let text = frame
         .cells
         .chunks(frame.width as usize)
@@ -1791,20 +1793,22 @@ fn lane_tab_fallback_rows_show_workspace_tabs_without_detected_agents() {
             right_click_passthrough: false,
         },
     ];
-    projected.remote_agents.push(crate::protocol::ClientShellRemoteAgent {
-        agent_id: "herm-b-slyce-goaldaddy".into(),
-        host: Some("herm-b".into()),
-        project: "slyce".into(),
-        lane: "goaldaddy".into(),
-        status: "idle".into(),
-        user: "herm".into(),
-        cwd: None,
-        process_alive: true,
-        stream_alive: true,
-        last_seen_ts: None,
-        session_memo: None,
-        context_usage: None,
-    });
+    projected
+        .remote_agents
+        .push(crate::protocol::ClientShellRemoteAgent {
+            agent_id: "herm-b-slyce-goaldaddy".into(),
+            host: Some("herm-b".into()),
+            project: "slyce".into(),
+            lane: "goaldaddy".into(),
+            status: "idle".into(),
+            user: "herm".into(),
+            cwd: None,
+            process_alive: true,
+            stream_alive: true,
+            last_seen_ts: None,
+            session_memo: None,
+            context_usage: None,
+        });
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());

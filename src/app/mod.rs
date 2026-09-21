@@ -16,10 +16,10 @@ pub(crate) use api_helpers::limit_snapshot_lines;
 mod creation;
 mod custom_commands;
 mod git_refresh;
-mod presence_refresh;
 mod ids;
 pub(crate) mod pane_graphics;
 mod popup;
+mod presence_refresh;
 mod runtime;
 mod session;
 pub mod state;
@@ -373,25 +373,11 @@ impl App {
         // Try to restore previous session
         let mut restored_terminals = std::collections::HashMap::new();
         let mut restored_terminal_runtimes = crate::terminal::TerminalRuntimeRegistry::new();
-        let (
-            workspaces,
-            active,
-            selected,
-            sidebar_width,
-            sidebar_width_source,
-            sidebar_section_split,
-            collapsed_space_keys,
-            pinned,
-            pinned_panes,
-        ) = if !policy.restore_session {
+        let (workspaces, active, selected, pinned, pinned_panes) = if !policy.restore_session {
             (
                 Vec::new(),
                 None,
                 0,
-                config.ui.sidebar_width,
-                state::SidebarWidthSource::ConfigDefault,
-                0.5_f32,
-                std::collections::HashSet::new(),
                 Vec::new(),
                 std::collections::HashMap::new(),
             )
@@ -416,51 +402,20 @@ impl App {
             );
             restored_terminals = terminals;
             restored_terminal_runtimes = terminal_runtimes.into();
-            let sidebar_width = snap.sidebar_width.unwrap_or(config.ui.sidebar_width);
-            let sidebar_width_source = if snap.sidebar_width.is_some() {
-                state::SidebarWidthSource::Persisted
-            } else {
-                state::SidebarWidthSource::ConfigDefault
-            };
-            let sidebar_section_split = snap.sidebar_section_split.unwrap_or(0.5);
             if ws.is_empty() {
                 crate::logging::session_restored(0, "empty");
-                (
-                    Vec::new(),
-                    None,
-                    0,
-                    sidebar_width,
-                    sidebar_width_source,
-                    sidebar_section_split,
-                    snap.collapsed_space_keys,
-                    pinned,
-                    pinned_panes,
-                )
+                (Vec::new(), None, 0, pinned, pinned_panes)
             } else {
                 crate::logging::session_restored(ws.len(), "ok");
                 let active = snap.active.filter(|&i| i < ws.len());
                 let selected = snap.selected.min(ws.len().saturating_sub(1));
-                (
-                    ws,
-                    active,
-                    selected,
-                    sidebar_width,
-                    sidebar_width_source,
-                    sidebar_section_split,
-                    snap.collapsed_space_keys,
-                    pinned,
-                    pinned_panes,
-                )
+                (ws, active, selected, pinned, pinned_panes)
             }
         } else {
             (
                 Vec::new(),
                 None,
                 0,
-                config.ui.sidebar_width,
-                state::SidebarWidthSource::ConfigDefault,
-                0.5_f32,
-                std::collections::HashSet::new(),
                 Vec::new(),
                 std::collections::HashMap::new(),
             )
@@ -720,15 +675,15 @@ impl App {
         );
         let (workspaces, terminals, runtimes, pinned, pinned_panes) =
             crate::persist::restore_handoff(
-            snapshot,
-            config.advanced.scrollback_limit_bytes,
-            &config.terminal.default_shell,
-            config.terminal.shell_mode,
-            imports,
-            app.event_tx.clone(),
-            app.render_notify.clone(),
-            app.render_dirty.clone(),
-        )?;
+                snapshot,
+                config.advanced.scrollback_limit_bytes,
+                &config.terminal.default_shell,
+                config.terminal.shell_mode,
+                imports,
+                app.event_tx.clone(),
+                app.render_notify.clone(),
+                app.render_dirty.clone(),
+            )?;
         let pane_id_aliases = crate::persist::handoff_pane_aliases(snapshot, &workspaces);
 
         app.state.pane_id_aliases = pane_id_aliases;

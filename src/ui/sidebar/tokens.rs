@@ -311,7 +311,10 @@ rows = [[{ token = "workspace", rules = [{ equals = "long-workspace-name", fg = 
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].len(), 2);
         assert_eq!(rows[1].len(), 2);
-        assert_eq!(rows[1][0].kind, ResolvedTokenKind::StateText("working".into()));
+        assert_eq!(
+            rows[1][0].kind,
+            ResolvedTokenKind::StateText("working".into())
+        );
         assert_eq!(rows[1][1].kind, ResolvedTokenKind::Agent("pi".into()));
     }
 

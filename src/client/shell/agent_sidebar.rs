@@ -115,8 +115,22 @@ pub(super) fn render_agent_panel_header(
     let header_y = area.y + 1;
     if let Some(label) = agent_view_label {
         let label_width = display_width(label).min(area.width as usize) as u16;
-        let label_rect = Rect::new(area.right().saturating_sub(label_width), header_y, label_width, 1);
-        put_text(buffer, label_rect.x, label_rect.y, label_rect.width, label, Style::default().fg(config.palette.accent).add_modifier(Modifier::BOLD));
+        let label_rect = Rect::new(
+            area.right().saturating_sub(label_width),
+            header_y,
+            label_width,
+            1,
+        );
+        put_text(
+            buffer,
+            label_rect.x,
+            label_rect.y,
+            label_rect.width,
+            label,
+            Style::default()
+                .fg(config.palette.accent)
+                .add_modifier(Modifier::BOLD),
+        );
         return true;
     }
 
@@ -181,25 +195,26 @@ fn right_aligned_toggle_rects(area: Rect, y: u16, labels: &[&str]) -> Vec<Rect> 
     widths
         .into_iter()
         .map(|width| {
-            let rect = Rect::new(x.min(area.right()), y, width.min(area.right().saturating_sub(x)), 1);
+            let rect = Rect::new(
+                x.min(area.right()),
+                y,
+                width.min(area.right().saturating_sub(x)),
+                1,
+            );
             x = x.saturating_add(width).saturating_add(separator_width);
             rect
         })
         .collect()
 }
 
-fn agent_panel_scope_label(
-    scope: crate::config::AgentPanelScopeConfig,
-) -> &'static str {
+fn agent_panel_scope_label(scope: crate::config::AgentPanelScopeConfig) -> &'static str {
     match scope {
         crate::config::AgentPanelScopeConfig::All => "all",
         crate::config::AgentPanelScopeConfig::ActiveWorkspace => "here",
     }
 }
 
-fn agent_panel_remotes_label(
-    remotes: crate::config::AgentPanelRemotesConfig,
-) -> &'static str {
+fn agent_panel_remotes_label(remotes: crate::config::AgentPanelRemotesConfig) -> &'static str {
     match remotes {
         crate::config::AgentPanelRemotesConfig::Show => "remotes",
         crate::config::AgentPanelRemotesConfig::Hide => "local",
@@ -222,16 +237,13 @@ fn effective_scope_workspace_id(snapshot: &ClientShellSnapshot) -> Option<&str> 
                 .map(|agent| agent.workspace_id.as_str())
         })
         .or_else(|| {
-            snapshot
-                .focused_pane_id
-                .as_deref()
-                .and_then(|pane_id| {
-                    snapshot
-                        .panes
-                        .iter()
-                        .find(|pane| pane.pane_id == pane_id)
-                        .map(|pane| pane.workspace_id.as_str())
-                })
+            snapshot.focused_pane_id.as_deref().and_then(|pane_id| {
+                snapshot
+                    .panes
+                    .iter()
+                    .find(|pane| pane.pane_id == pane_id)
+                    .map(|pane| pane.workspace_id.as_str())
+            })
         })
         .or_else(|| {
             snapshot
@@ -280,23 +292,16 @@ fn remote_presence_matches_scope(
     }
 }
 
-fn live_presence_covers_lane(
-    snapshot: &ClientShellSnapshot,
-    project: &str,
-    lane: &str,
-) -> bool {
-    snapshot.remote_agents.iter().any(|agent| {
-        agent.process_alive && agent.project == project && agent.lane == lane
-    })
+fn live_presence_covers_lane(snapshot: &ClientShellSnapshot, project: &str, lane: &str) -> bool {
+    snapshot
+        .remote_agents
+        .iter()
+        .any(|agent| agent.process_alive && agent.project == project && agent.lane == lane)
 }
 
 /// True when this server already has a workspace tab named for the lane.
 /// Fleet lanes on the VPS should render as local tab rows, not presence rows.
-fn workspace_has_lane_tab(
-    snapshot: &ClientShellSnapshot,
-    project: &str,
-    lane: &str,
-) -> bool {
+fn workspace_has_lane_tab(snapshot: &ClientShellSnapshot, project: &str, lane: &str) -> bool {
     snapshot
         .workspaces
         .iter()
@@ -310,11 +315,7 @@ fn workspace_has_lane_tab(
         .any(|tab| tab.label == lane)
 }
 
-fn local_agent_has_lane(
-    snapshot: &ClientShellSnapshot,
-    project: &str,
-    lane: &str,
-) -> bool {
+fn local_agent_has_lane(snapshot: &ClientShellSnapshot, project: &str, lane: &str) -> bool {
     snapshot.agents.iter().any(|agent| {
         let Some(workspace) = snapshot
             .workspaces
@@ -518,8 +519,11 @@ pub(super) fn agent_rows(
                 .agents
                 .iter()
                 .find(|agent| agent.pane_id == pane_id)?;
-            if !agent_matches_scope(snapshot, agent.workspace_id.as_str(), config.agent_panel_scope)
-            {
+            if !agent_matches_scope(
+                snapshot,
+                agent.workspace_id.as_str(),
+                config.agent_panel_scope,
+            ) {
                 return None;
             }
             let workspace = snapshot
@@ -589,7 +593,11 @@ fn remote_agent_rows<'a>(
         .filter(|_| config.agent_panel_remotes == crate::config::AgentPanelRemotesConfig::Show)
         .filter(|agent| agent.process_alive)
         .filter(|agent| {
-            remote_presence_matches_scope(snapshot, agent.project.as_str(), config.agent_panel_scope)
+            remote_presence_matches_scope(
+                snapshot,
+                agent.project.as_str(),
+                config.agent_panel_scope,
+            )
         })
         .filter(|agent| {
             !workspace_has_lane_tab(snapshot, agent.project.as_str(), agent.lane.as_str())
@@ -608,11 +616,7 @@ fn remote_agent_rows<'a>(
                 tokens.insert("session_memo".to_string(), memo.to_string());
             }
             tokens.insert("kind".to_string(), kind.to_string());
-            if let Some(last_seen) = agent
-                .last_seen_ts
-                .as_deref()
-                .and_then(remote_relative_time)
-            {
+            if let Some(last_seen) = agent.last_seen_ts.as_deref().and_then(remote_relative_time) {
                 tokens.insert("last_seen".to_string(), last_seen);
             }
             if let Some(context) = agent.context_usage.clone() {
@@ -656,10 +660,7 @@ fn remote_agent_kind(agent: &crate::protocol::ClientShellRemoteAgent) -> &'stati
 /// Format presence freshness without claiming that it is a mailbox message.
 /// Invalid timestamps are omitted; this keeps old/partial feeds honest.
 fn remote_relative_time(timestamp: &str) -> Option<String> {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()?
-        .as_secs() as i64;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs() as i64;
     remote_relative_time_at(timestamp, now)
 }
 

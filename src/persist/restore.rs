@@ -481,7 +481,16 @@ fn restore_with_imports_and_failures(
     }
     terminal_runtimes.extend(pinned_runtimes);
 
-    ((workspaces, terminals, terminal_runtimes, pinned, pinned_panes), failed_imports)
+    (
+        (
+            workspaces,
+            terminals,
+            terminal_runtimes,
+            pinned,
+            pinned_panes,
+        ),
+        failed_imports,
+    )
 }
 
 fn restore_workspace(
@@ -1741,8 +1750,13 @@ mod tests {
             "native agent restore should not spawn a fallback-size runtime during snapshot restore"
         );
         let mut imports = HashMap::new();
-        let (_handoff_workspaces, handoff_terminals, handoff_runtimes, _handoff_pinned, _handoff_pinned_panes) =
-            restore_handoff(
+        let (
+            _handoff_workspaces,
+            handoff_terminals,
+            handoff_runtimes,
+            _handoff_pinned,
+            _handoff_pinned_panes,
+        ) = restore_handoff(
             &snapshot,
             0,
             test_restore_shell(),

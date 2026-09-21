@@ -1,12 +1,12 @@
 use crate::api::schema::{
     Method, OutputMatch, PaneCurrentParams, PaneDirection, PaneEdgesParams,
     PaneFocusDirectionParams, PaneInputSetParams, PaneLayoutParams, PaneListParams,
-    PaneMoveDestination, PaneMoveParams, PaneNeighborParams, PaneProcessInfoParams, PaneReadParams,
-    PaneReleaseAgentParams, PaneRenameParams, PaneReportAgentParams, PaneReportAgentSessionParams,
-    PaneReportMetadataParams, PaneResizeParams, PaneRightClickTarget, PaneSendInputParams,
-    PaneSendKeysParams, PaneSendTextParams, PanePinParams, PaneSplitParams, PaneSwapParams,
-    PaneTarget, PaneUnpinParams, PaneWaitForOutputParams, PaneZoomMode, PaneZoomParams,
-    PinnedSide, ReadFormat, ReadSource, Request, SplitDirection,
+    PaneMoveDestination, PaneMoveParams, PaneNeighborParams, PanePinParams, PaneProcessInfoParams,
+    PaneReadParams, PaneReleaseAgentParams, PaneRenameParams, PaneReportAgentParams,
+    PaneReportAgentSessionParams, PaneReportMetadataParams, PaneResizeParams, PaneRightClickTarget,
+    PaneSendInputParams, PaneSendKeysParams, PaneSendTextParams, PaneSplitParams, PaneSwapParams,
+    PaneTarget, PaneUnpinParams, PaneWaitForOutputParams, PaneZoomMode, PaneZoomParams, PinnedSide,
+    ReadFormat, ReadSource, Request, SplitDirection,
 };
 
 pub(super) fn run_pane_command(args: &[String]) -> std::io::Result<i32> {
@@ -656,8 +656,9 @@ fn parse_pane_pin_args(args: &[String]) -> Result<PanePinParams, String> {
                 let Some(value) = args.get(index + 1) else {
                     return Err("missing value for --ratio".into());
                 };
-                let parsed: f32 =
-                    value.parse().map_err(|_| format!("invalid ratio: {value}"))?;
+                let parsed: f32 = value
+                    .parse()
+                    .map_err(|_| format!("invalid ratio: {value}"))?;
                 if !(0.0..=1.0).contains(&parsed) {
                     return Err(format!("invalid ratio: {value}"));
                 }

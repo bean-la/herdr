@@ -73,7 +73,7 @@ impl App {
 
     pub(crate) fn can_render_now(&self, now: Instant) -> bool {
         match self.last_render_at {
-            Some(last_render_at) => now.duration_since(last_render_at) >= *MIN_RENDER_INTERVAL,
+            Some(last_render_at) => now.duration_since(last_render_at) >= MIN_RENDER_INTERVAL,
             None => true,
         }
     }
@@ -140,7 +140,7 @@ impl App {
     ) -> Option<Instant> {
         let render_deadline = if needs_render {
             self.last_render_at
-                .map(|last_render_at| last_render_at + *MIN_RENDER_INTERVAL)
+                .map(|last_render_at| last_render_at + MIN_RENDER_INTERVAL)
                 .filter(|deadline| *deadline > now)
         } else {
             None
