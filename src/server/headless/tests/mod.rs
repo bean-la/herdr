@@ -210,7 +210,7 @@ fn headless_pane_list(server: &mut HeadlessServer) -> Vec<api::schema::PaneInfo>
     });
     let response: api::schema::SuccessResponse =
         serde_json::from_str(&response_rx.recv().unwrap()).unwrap();
-    let api::schema::ResponseResult::PaneList { panes } = response.result else {
+    let api::schema::ResponseResult::PaneList { panes, .. } = response.result else {
         panic!("expected pane list");
     };
     panes

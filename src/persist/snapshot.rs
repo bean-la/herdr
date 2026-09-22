@@ -18,6 +18,9 @@ pub struct SessionSnapshot {
     #[serde(default)]
     pub version: u32,
     pub workspaces: Vec<WorkspaceSnapshot>,
+    /// Session-level pinned panes (rendered in every workspace × tab).
+    #[serde(default)]
+    pub pinned: Vec<PinnedPaneSnapshot>,
     pub active: Option<usize>,
     pub selected: usize,
     #[serde(default)]
@@ -94,7 +97,18 @@ pub struct TabSnapshot {
     pub root_pane: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize)]
+/// A session-level pinned pane: its placement spec + the pane it hosts.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PinnedPaneSnapshot {
+    #[serde(default)]
+    pub side: crate::pinned::PinnedSide,
+    #[serde(default)]
+    pub ratio: f32,
+    #[serde(default)]
+    pub pane: Option<PaneSnapshot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PaneSnapshot {
     pub cwd: PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -175,6 +189,8 @@ struct RawSessionSnapshot {
     #[serde(default)]
     workspaces: Vec<serde_json::Value>,
     #[serde(default)]
+    pinned: Vec<PinnedPaneSnapshot>,
+    #[serde(default)]
     active: Option<usize>,
     #[serde(default)]
     selected: usize,
@@ -189,6 +205,7 @@ struct RawSessionSnapshot {
 fn migrate_snapshot(raw: RawSessionSnapshot) -> Result<SessionSnapshot, String> {
     Ok(SessionSnapshot {
         version: raw.version,
+        pinned: raw.pinned,
         workspaces: raw
             .workspaces
             .into_iter()
@@ -258,6 +275,8 @@ pub fn capture(
     terminal_runtimes: &TerminalRuntimeRegistry,
     active: Option<usize>,
     selected: usize,
+    pinned: &[crate::pinned::PinnedPane],
+    pinned_panes: &std::collections::HashMap<crate::layout::PaneId, crate::pane::PaneState>,
 ) -> SessionSnapshot {
     SessionSnapshot {
         version: SNAPSHOT_VERSION,
@@ -265,12 +284,76 @@ pub fn capture(
             .iter()
             .map(|workspace| capture_workspace(workspace, terminals, terminal_runtimes))
             .collect(),
+        pinned: capture_pinned(pinned, pinned_panes, terminals),
         active,
         selected,
         sidebar_width: None,
         sidebar_section_split: None,
         collapsed_space_keys: std::collections::HashSet::new(),
     }
+}
+
+fn capture_pinned(
+    pinned: &[crate::pinned::PinnedPane],
+    pinned_panes: &std::collections::HashMap<crate::layout::PaneId, crate::pane::PaneState>,
+    terminals: &std::collections::HashMap<
+        crate::terminal::TerminalId,
+        crate::terminal::TerminalState,
+    >,
+) -> Vec<PinnedPaneSnapshot> {
+    pinned
+        .iter()
+        .map(|pin| PinnedPaneSnapshot {
+            side: pin.side,
+            ratio: pin.ratio,
+            pane: pinned_panes.get(&pin.pane_id).and_then(|pane| {
+                let terminal = terminals.get(&pane.attached_terminal_id);
+                let cwd = terminal
+                    .map(|t| t.cwd.clone())
+                    .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| "/".into()));
+                let label = terminal.and_then(|t| t.manual_label.clone());
+                let (agent_name, managed_agent_kind) = terminal
+                    .filter(|t| !t.managed_agent_launch_pending())
+                    .map(|t| {
+                        (
+                            t.agent_name.clone(),
+                            t.managed_agent_kind()
+                                .map(|agent| crate::detect::agent_label(agent).to_string()),
+                        )
+                    })
+                    .unwrap_or_default();
+                let launch_argv = terminal.and_then(|t| t.launch_argv.clone());
+                let agent_session = terminal.and_then(|t| {
+                    if let Some(authority) = t.hook_authority.as_ref() {
+                        if let Some(session_ref) = authority.session_ref.as_ref() {
+                            return Some(PaneAgentSessionSnapshot {
+                                source: authority.source.clone(),
+                                agent: authority.agent_label.clone(),
+                                kind: session_ref.kind,
+                                value: session_ref.value.clone(),
+                            });
+                        }
+                    }
+                    t.persisted_agent_session
+                        .as_ref()
+                        .map(|session| PaneAgentSessionSnapshot {
+                            source: session.source.clone(),
+                            agent: session.agent.clone(),
+                            kind: session.session_ref.kind,
+                            value: session.session_ref.value.clone(),
+                        })
+                });
+                Some(PaneSnapshot {
+                    cwd,
+                    label,
+                    agent_name,
+                    managed_agent_kind,
+                    agent_session,
+                    launch_argv,
+                })
+            }),
+        })
+        .collect()
 }
 
 fn capture_workspace(
@@ -535,6 +618,8 @@ mod tests {
             terminal_runtimes,
             state.active,
             state.selected,
+            &state.pinned,
+            &state.pinned_panes,
         )
     }
 
@@ -593,6 +678,7 @@ mod tests {
     fn round_trip_empty_session() {
         let snap = SessionSnapshot {
             version: SNAPSHOT_VERSION,
+            pinned: vec![],
             workspaces: vec![],
             active: None,
             selected: 0,
@@ -687,6 +773,7 @@ mod tests {
             sidebar_section_split: Some(0.5),
             collapsed_space_keys: std::collections::HashSet::new(),
             version: SNAPSHOT_VERSION,
+            pinned: vec![],
         };
 
         let json = serde_json::to_string_pretty(&snap).unwrap();
@@ -1224,6 +1311,7 @@ mod tests {
 
         let snap = SessionSnapshot {
             version: SNAPSHOT_VERSION,
+            pinned: vec![],
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("test-ws".to_string()),
                 custom_name: Some("fallback test".to_string()),

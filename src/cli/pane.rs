@@ -1,12 +1,12 @@
 use crate::api::schema::{
     Method, OutputMatch, PaneCurrentParams, PaneDirection, PaneEdgesParams,
     PaneFocusDirectionParams, PaneInputSetParams, PaneLayoutParams, PaneListParams,
-    PaneMoveDestination, PaneMoveParams, PaneNeighborParams, PaneProcessInfoParams, PaneReadParams,
-    PaneReleaseAgentParams, PaneRenameParams, PaneReportAgentParams, PaneReportAgentSessionParams,
-    PaneReportMetadataParams, PaneResizeParams, PaneRightClickTarget, PaneSendInputParams,
-    PaneSendKeysParams, PaneSendTextParams, PaneSplitParams, PaneSwapParams, PaneTarget,
-    PaneWaitForOutputParams, PaneZoomMode, PaneZoomParams, ReadFormat, ReadSource, Request,
-    SplitDirection,
+    PaneMoveDestination, PaneMoveParams, PaneNeighborParams, PanePinParams, PaneProcessInfoParams,
+    PaneReadParams, PaneReleaseAgentParams, PaneRenameParams, PaneReportAgentParams,
+    PaneReportAgentSessionParams, PaneReportMetadataParams, PaneResizeParams, PaneRightClickTarget,
+    PaneSendInputParams, PaneSendKeysParams, PaneSendTextParams, PaneSplitParams, PaneSwapParams,
+    PaneTarget, PaneUnpinParams, PaneWaitForOutputParams, PaneZoomMode, PaneZoomParams, PinnedSide,
+    ReadFormat, ReadSource, Request, SplitDirection,
 };
 
 pub(super) fn run_pane_command(args: &[String]) -> std::io::Result<i32> {
@@ -30,6 +30,8 @@ pub(super) fn run_pane_command(args: &[String]) -> std::io::Result<i32> {
         "rename" => pane_rename(&args[1..]),
         "input" => pane_input(&args[1..]),
         "split" => pane_split(&args[1..]),
+        "pin" => pane_pin(&args[1..]),
+        "unpin" => pane_unpin(&args[1..]),
         "swap" => pane_swap(&args[1..]),
         "move" => pane_move(&args[1..]),
         "close" => pane_close(&args[1..]),
@@ -612,6 +614,83 @@ fn parse_right_click_target(value: &str) -> Result<PaneRightClickTarget, String>
         "pane" => Ok(PaneRightClickTarget::Pane),
         _ => Err(format!("invalid right-click target: {value}")),
     }
+}
+
+fn pane_pin(args: &[String]) -> std::io::Result<i32> {
+    let params = match parse_pane_pin_args(args) {
+        Ok(params) => params,
+        Err(message) => {
+            eprintln!("{message}");
+            return Ok(2);
+        }
+    };
+
+    super::runtime::pane_pin(params)
+}
+
+fn parse_pane_pin_args(args: &[String]) -> Result<PanePinParams, String> {
+    let Some(raw_pane_id) = args.first() else {
+        return Err(pane_pin_usage());
+    };
+    if raw_pane_id.starts_with('-') {
+        return Err(pane_pin_usage());
+    }
+    let pane_id = super::normalize_pane_id(raw_pane_id);
+    let mut side = PinnedSide::Right;
+    let mut ratio = None;
+    let mut index = 1;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--side" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("missing value for --side".into());
+                };
+                side = match value.as_str() {
+                    "right" => PinnedSide::Right,
+                    "down" => PinnedSide::Down,
+                    other => return Err(format!("invalid side: {other} (right|down)")),
+                };
+                index += 2;
+            }
+            "--ratio" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("missing value for --ratio".into());
+                };
+                let parsed: f32 = value
+                    .parse()
+                    .map_err(|_| format!("invalid ratio: {value}"))?;
+                if !(0.0..=1.0).contains(&parsed) {
+                    return Err(format!("invalid ratio: {value}"));
+                }
+                ratio = Some(parsed);
+                index += 2;
+            }
+            other => return Err(format!("unexpected argument: {other}")),
+        }
+    }
+    Ok(PanePinParams {
+        pane_id,
+        side,
+        ratio,
+    })
+}
+
+fn pane_pin_usage() -> String {
+    "usage: herdr pane pin <pane_id> [--side right|down] [--ratio FLOAT]".into()
+}
+
+fn pane_unpin(args: &[String]) -> std::io::Result<i32> {
+    let Some(raw_pane_id) = args.first() else {
+        eprintln!("usage: herdr pane unpin <pane_id>");
+        return Ok(2);
+    };
+    if raw_pane_id.starts_with('-') {
+        eprintln!("usage: herdr pane unpin <pane_id>");
+        return Ok(2);
+    }
+    super::runtime::pane_unpin(PaneUnpinParams {
+        pane_id: super::normalize_pane_id(raw_pane_id),
+    })
 }
 
 fn pane_split(args: &[String]) -> std::io::Result<i32> {

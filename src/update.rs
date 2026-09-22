@@ -72,7 +72,11 @@ pub struct Version {
 impl Version {
     pub fn parse(s: &str) -> Option<Self> {
         let s = s.strip_prefix('v').unwrap_or(s);
-        let parts: Vec<&str> = s.split('.').collect();
+        // brndr fork builds append their short commit SHA (for example,
+        // `0.9.1-78623533`). Compare the release semver while retaining the
+        // full build identity for display elsewhere.
+        let base = s.split_once('-').map_or(s, |(base, _)| base);
+        let parts: Vec<&str> = base.split('.').collect();
         if parts.len() != 3 {
             return None;
         }
@@ -3404,6 +3408,14 @@ mod tests {
     fn current_version_parses() {
         let v = Version::current();
         assert!(v.major < 100);
+    }
+
+    #[test]
+    fn fork_build_version_parses_for_update_comparison() {
+        assert_eq!(
+            Version::parse("0.9.1-78623533"),
+            Some(Version { major: 0, minor: 9, patch: 1 })
+        );
     }
 
     #[test]

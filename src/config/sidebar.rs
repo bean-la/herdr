@@ -443,18 +443,13 @@ impl Default for AgentsSidebarConfig {
             rows: vec![
                 vec![
                     AgentSidebarToken::StateIcon,
-                    AgentSidebarToken::Machine,
                     AgentSidebarToken::Workspace,
-                    AgentSidebarToken::Tab,
-                    AgentSidebarToken::Custom("kind".into()),
-                    AgentSidebarToken::Agent,
+                    AgentSidebarToken::Machine,
                 ],
                 vec![
+                    AgentSidebarToken::Tab,
+                    AgentSidebarToken::Agent,
                     AgentSidebarToken::Custom("context".into()),
-                    AgentSidebarToken::Custom("think".into()),
-                    AgentSidebarToken::Custom("mail".into()),
-                    AgentSidebarToken::Custom("last".into()),
-                    AgentSidebarToken::Custom("last_seen".into()),
                 ],
             ],
             rows_by_agent: BTreeMap::new(),
@@ -495,25 +490,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_match_the_compact_agent_and_existing_space_layouts() {
+    fn defaults_match_the_two_row_agent_and_existing_space_layouts() {
         let config = SidebarConfig::default();
         assert_eq!(
             config.agents.rows,
             vec![
                 vec![
                     AgentSidebarToken::StateIcon,
-                    AgentSidebarToken::Machine,
                     AgentSidebarToken::Workspace,
-                    AgentSidebarToken::Tab,
-                    AgentSidebarToken::Custom("kind".into()),
-                    AgentSidebarToken::Agent,
+                    AgentSidebarToken::Machine,
                 ],
                 vec![
+                    AgentSidebarToken::Tab,
+                    AgentSidebarToken::Agent,
                     AgentSidebarToken::Custom("context".into()),
-                    AgentSidebarToken::Custom("think".into()),
-                    AgentSidebarToken::Custom("mail".into()),
-                    AgentSidebarToken::Custom("last".into()),
-                    AgentSidebarToken::Custom("last_seen".into()),
                 ],
             ]
         );

@@ -35,6 +35,7 @@ mod noninteractive_process;
 mod pane;
 mod pane_graphics_files;
 mod persist;
+mod pinned;
 mod platform;
 mod plugin_command;
 mod plugin_paths;
@@ -342,7 +343,7 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # [ui.sidebar.agents]
 # Blank rows between agent entries. Set to 1 to restore the previous spacing.
 # row_gap = 0
-# rows = [["state_icon", "machine", "workspace", "tab"], ["agent"]]
+# rows = [["state_icon", "workspace", "machine"], ["tab", "agent", "$context"]]
 # Optional canonical agent IDs replace the default rows for matching agents.
 # [ui.sidebar.agents.rows_by_agent]
 # claude = [["state_icon", "machine", "workspace", "tab"], ["terminal_title_stripped"], ["agent"]]
@@ -573,7 +574,10 @@ fn main() -> io::Result<()> {
         return client::run_client();
     }
 
-    if matches!(args.get(1).map(String::as_str), Some("update") | Some("upgrade")) {
+    if matches!(
+        args.get(1).map(String::as_str),
+        Some("update") | Some("upgrade")
+    ) {
         let options = match update::parse_self_update_args(&args[2..]) {
             Ok(options) => options,
             Err(err) if err.starts_with("usage:") => {

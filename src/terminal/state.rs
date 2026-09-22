@@ -1823,12 +1823,9 @@ impl TerminalState {
             && (!crate::detect::full_lifecycle_hook_authority(
                 &authority.source,
                 &authority.agent_label,
-            ) || crate::detect::parse_agent_label(&authority.agent_label).is_none_or(
-                |agent| {
-                    self.detected_agent == Some(agent)
-                        && self.recent_agent_process_exit.is_none()
-                },
-            ))
+            ) || crate::detect::parse_agent_label(&authority.agent_label).is_none_or(|agent| {
+                self.detected_agent == Some(agent) && self.recent_agent_process_exit.is_none()
+            }))
     }
 
     pub fn effective_agent_label(&self) -> Option<&str> {
@@ -2376,8 +2373,7 @@ mod tests {
     fn cursor_session_and_title_establish_sidebar_label_without_process_detection() {
         let mut terminal = test_terminal();
         terminal.set_terminal_title(Some("Cursor Agent".into()));
-        let session_ref =
-            crate::agent_resume::AgentSessionRef::id("cursor-session").unwrap();
+        let session_ref = crate::agent_resume::AgentSessionRef::id("cursor-session").unwrap();
         terminal
             .set_agent_session_ref_for_session_start(
                 "herdr:cursor".into(),
@@ -2397,8 +2393,7 @@ mod tests {
     fn cursor_session_without_active_title_does_not_establish_sidebar_label() {
         let mut terminal = test_terminal();
         terminal.set_terminal_title(Some("slyce meta".into()));
-        let session_ref =
-            crate::agent_resume::AgentSessionRef::id("cursor-session").unwrap();
+        let session_ref = crate::agent_resume::AgentSessionRef::id("cursor-session").unwrap();
         terminal
             .set_agent_session_ref_for_session_start(
                 "herdr:cursor".into(),
@@ -4093,11 +4088,8 @@ mod tests {
         // Simulate the agent going silent (no heartbeat for > TTL). Advance
         // reported_at into the past so the wall-clock elapsed() crosses the
         // staleness bound.
-        terminal
-            .hook_authority
-            .as_mut()
-            .unwrap()
-            .reported_at = Instant::now() - HOOK_AUTHORITY_STALE_AFTER - Duration::from_secs(1);
+        terminal.hook_authority.as_mut().unwrap().reported_at =
+            Instant::now() - HOOK_AUTHORITY_STALE_AFTER - Duration::from_secs(1);
         assert_eq!(terminal.effective_agent_label(), None);
         assert!(!terminal.is_agent_terminal());
     }

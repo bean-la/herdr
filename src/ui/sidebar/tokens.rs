@@ -311,7 +311,10 @@ rows = [[{ token = "workspace", rules = [{ equals = "long-workspace-name", fg = 
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].len(), 2);
         assert_eq!(rows[1].len(), 2);
-        assert_eq!(rows[1][0].kind, ResolvedTokenKind::StateText("working".into()));
+        assert_eq!(
+            rows[1][0].kind,
+            ResolvedTokenKind::StateText("working".into())
+        );
         assert_eq!(rows[1][1].kind, ResolvedTokenKind::Agent("pi".into()));
     }
 
@@ -495,6 +498,47 @@ rows = [[{ token = "$load", rules = [{ lt = 50, hide = true }] }], ["workspace"]
                 ResolvedToken::unstyled(ResolvedTokenKind::StateText("deep in the mines".into())),
                 ResolvedToken::unstyled(ResolvedTokenKind::Custom("reviewing auth".into())),
             ]]
+        );
+    }
+
+    #[test]
+    fn default_two_row_layout_keeps_tab_when_context_is_missing() {
+        let mut entry = entry();
+        entry.tab = Some("goaldaddy".into());
+        entry.agent_label = None;
+        let rows = agent_rows(&AgentsSidebarConfig::default(), context(&entry), "idle");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[0],
+            vec![
+                ResolvedToken::unstyled(ResolvedTokenKind::StateIcon),
+                ResolvedToken::unstyled(ResolvedTokenKind::Workspace("repo".into())),
+            ]
+        );
+        assert_eq!(
+            rows[1],
+            vec![ResolvedToken::unstyled(ResolvedTokenKind::Tab(
+                "goaldaddy".into()
+            ))]
+        );
+
+        entry.tab = Some("1".into());
+        entry.agent_label = Some("perky-b76d".into());
+        let rows = agent_rows(&AgentsSidebarConfig::default(), context(&entry), "idle");
+        assert_eq!(
+            rows[1],
+            vec![
+                ResolvedToken::unstyled(ResolvedTokenKind::Tab("1".into())),
+                ResolvedToken::unstyled(ResolvedTokenKind::Agent("perky-b76d".into())),
+            ]
+        );
+
+        let mut remote = context(&entry);
+        remote.machine = Some("sebluair");
+        let rows = agent_rows(&AgentsSidebarConfig::default(), remote, "idle");
+        assert_eq!(
+            rows[0][2],
+            ResolvedToken::unstyled(ResolvedTokenKind::Machine("sebluair".into()))
         );
     }
 

@@ -16,10 +16,10 @@ pub(crate) use api_helpers::limit_snapshot_lines;
 mod creation;
 mod custom_commands;
 mod git_refresh;
-mod presence_refresh;
 mod ids;
 pub(crate) mod pane_graphics;
 mod popup;
+mod presence_refresh;
 mod runtime;
 mod session;
 pub mod state;
@@ -373,15 +373,21 @@ impl App {
         // Try to restore previous session
         let mut restored_terminals = std::collections::HashMap::new();
         let mut restored_terminal_runtimes = crate::terminal::TerminalRuntimeRegistry::new();
-        let (workspaces, active, selected) = if !policy.restore_session {
-            (Vec::new(), None, 0)
+        let (workspaces, active, selected, pinned, pinned_panes) = if !policy.restore_session {
+            (
+                Vec::new(),
+                None,
+                0,
+                Vec::new(),
+                std::collections::HashMap::new(),
+            )
         } else if let Some(snap) = crate::persist::load() {
             let history = config
                 .experimental
                 .pane_history
                 .then(crate::persist::load_history)
                 .flatten();
-            let (ws, terminals, terminal_runtimes) = crate::persist::restore(
+            let (ws, terminals, terminal_runtimes, pinned, pinned_panes) = crate::persist::restore(
                 &snap,
                 history.as_ref(),
                 24,
@@ -398,15 +404,21 @@ impl App {
             restored_terminal_runtimes = terminal_runtimes.into();
             if ws.is_empty() {
                 crate::logging::session_restored(0, "empty");
-                (Vec::new(), None, 0)
+                (Vec::new(), None, 0, pinned, pinned_panes)
             } else {
                 crate::logging::session_restored(ws.len(), "ok");
                 let active = snap.active.filter(|&i| i < ws.len());
                 let selected = snap.selected.min(ws.len().saturating_sub(1));
-                (ws, active, selected)
+                (ws, active, selected, pinned, pinned_panes)
             }
         } else {
-            (Vec::new(), None, 0)
+            (
+                Vec::new(),
+                None,
+                0,
+                Vec::new(),
+                std::collections::HashMap::new(),
+            )
         };
 
         let agent_panel_sort = agent_panel_sort_from_config(config.ui.agent_panel_sort);
@@ -451,6 +463,8 @@ impl App {
             public_pane_id_aliases: std::collections::HashMap::new(),
             workspaces,
             active,
+            pinned,
+            pinned_panes,
             previous_pane_focus: None,
             selected,
             mode,
@@ -530,6 +544,14 @@ impl App {
         };
 
         state.terminals = restored_terminals;
+
+        // Session-level pins get stable public aliases (pin:1, pin:2, …) so
+        // unpin/read/send resolve them after a restore.
+        for (i, pin) in state.pinned.iter().enumerate() {
+            state
+                .public_pane_id_aliases
+                .insert(format!("pin:{}", i + 1), pin.pane_id);
+        }
 
         for ws_idx in 0..state.workspaces.len() {
             let cwd = state.workspaces[ws_idx]
@@ -653,20 +675,28 @@ impl App {
             api_rx,
             event_hub,
         );
-        let (workspaces, terminals, runtimes) = crate::persist::restore_handoff(
-            snapshot,
-            config.advanced.scrollback_limit_bytes,
-            &config.terminal.default_shell,
-            config.terminal.shell_mode,
-            imports,
-            app.event_tx.clone(),
-            app.render_notify.clone(),
-            app.render_dirty.clone(),
-        )?;
+        let (workspaces, terminals, runtimes, pinned, pinned_panes) =
+            crate::persist::restore_handoff(
+                snapshot,
+                config.advanced.scrollback_limit_bytes,
+                &config.terminal.default_shell,
+                config.terminal.shell_mode,
+                imports,
+                app.event_tx.clone(),
+                app.render_notify.clone(),
+                app.render_dirty.clone(),
+            )?;
         let pane_id_aliases = crate::persist::handoff_pane_aliases(snapshot, &workspaces);
 
         app.state.pane_id_aliases = pane_id_aliases;
         app.state.workspaces = workspaces;
+        app.state.pinned = pinned;
+        app.state.pinned_panes = pinned_panes;
+        for (i, pin) in app.state.pinned.iter().enumerate() {
+            app.state
+                .public_pane_id_aliases
+                .insert(format!("pin:{}", i + 1), pin.pane_id);
+        }
         app.state.terminals = terminals;
         app.terminal_runtimes = runtimes.into();
         app.state.active = snapshot

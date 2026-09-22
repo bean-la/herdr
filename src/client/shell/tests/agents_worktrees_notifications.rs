@@ -844,7 +844,10 @@ fn agent_remotes_toggle_hides_presence_and_persists_per_endpoint() {
         shown_text.contains("groovy-16be"),
         "ad-hoc presence should keep the nickname, not only the suffix: {shown_text}"
     );
-    assert!(shown_text.contains("HRM"), "herm presence should be labeled HRM: {shown_text}");
+    assert!(
+        shown_text.contains("herm"),
+        "herm presence should show the project on row one: {shown_text}"
+    );
     let toggle = state.hits.agent_remotes_toggle;
     let click = state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
@@ -1539,7 +1542,12 @@ fn remote_presence_rows_render_without_click_targets() {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(text.contains("slyce · perky-e9fb"), "frame: {text}");
+    assert!(text.contains("slyce"), "frame: {text}");
+    assert!(text.contains("perky-e9fb"), "frame: {text}");
+    assert!(
+        !text.contains("slyce · perky-e9fb"),
+        "workspace and lane belong on separate rows: {text}"
+    );
     assert!(
         state
             .hits
@@ -1637,7 +1645,9 @@ fn here_scope_uses_focused_agent_workspace_when_focused_workspace_id_is_stale() 
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
-    let frame = state.compose(106, 30).expect("stale focused workspace scope");
+    let frame = state
+        .compose(106, 30)
+        .expect("stale focused workspace scope");
     let text = frame
         .cells
         .chunks(frame.width as usize)
@@ -1704,7 +1714,7 @@ fn remote_presence_rows_remain_visible_when_scope_filters_local_agents() {
         "local agent in another workspace should be hidden in here scope: {text}"
     );
     assert!(
-        text.contains("slyce · perky-e9fb"),
+        text.contains("slyce") && text.contains("perky-e9fb"),
         "matching project-user presence should stay visible in here scope: {text}"
     );
 }
@@ -1732,7 +1742,7 @@ fn remote_presence_rows_hide_other_projects_in_here_scope() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        !text.contains("slyce · perky-e9fb"),
+        !text.contains("perky-e9fb"),
         "project-user presence for another project should be hidden in here scope: {text}"
     );
 }
@@ -1785,21 +1795,23 @@ fn lane_tab_fallback_rows_show_workspace_tabs_without_detected_agents() {
             right_click_passthrough: false,
         },
     ];
-    projected.remote_agents.push(crate::protocol::ClientShellRemoteAgent {
+    projected
+        .remote_agents
+        .push(crate::protocol::ClientShellRemoteAgent {
             session_id: None,
-        agent_id: "herm-b-slyce-goaldaddy".into(),
-        host: Some("herm-b".into()),
-        project: "slyce".into(),
-        lane: "goaldaddy".into(),
-        status: "idle".into(),
-        user: "herm".into(),
-        cwd: None,
-        process_alive: true,
-        stream_alive: true,
-        last_seen_ts: None,
-        session_memo: None,
-        context_usage: None,
-    });
+            agent_id: "herm-b-slyce-goaldaddy".into(),
+            host: Some("herm-b".into()),
+            project: "slyce".into(),
+            lane: "goaldaddy".into(),
+            status: "idle".into(),
+            user: "herm".into(),
+            cwd: None,
+            process_alive: true,
+            stream_alive: true,
+            last_seen_ts: None,
+            session_memo: None,
+            context_usage: None,
+        });
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
@@ -1864,11 +1876,67 @@ fn cross_host_presence_rows_label_host_and_lane() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        text.contains("sebluair"),
-        "cross-host presence should show the source host, not a generic remote label: {text}"
+        text.contains("slyce · sebluair"),
+        "cross-host presence should show host after the project on row one: {text}"
     );
     assert!(
         text.contains("moody-34e8"),
         "cross-host presence should show the lane as the tab token: {text}"
+    );
+    assert!(
+        !text.contains("slyce · moody-34e8"),
+        "project and lane belong on separate rows: {text}"
+    );
+}
+
+#[test]
+fn single_tab_project_user_keeps_workspace_and_lane_on_two_rows() {
+    let mut projected = snapshot();
+    projected.workspaces[0].label = "slyce".into();
+    projected.tabs[0].label = "1".into();
+    projected.tabs[0].custom_label = false;
+    projected.agents.push(ClientShellAgent {
+        pane_id: "pane_1".into(),
+        workspace_id: "ws_1".into(),
+        tab_id: "tab_1".into(),
+        name: None,
+        display_agent: None,
+        agent: Some("perky-b76d".into()),
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        agent_status: AgentStatus::Idle,
+        state_change_seq: 1,
+        state_labels: Vec::new(),
+        tokens: Vec::new(),
+        focused: true,
+    });
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.config.sidebar_max_width = 26;
+    state.sidebar_width = 20;
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    let frame = state.compose(80, 24).expect("project-user sidebar");
+    let lines = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>();
+    let text = lines.join("\n");
+    assert!(
+        text.contains("slyce"),
+        "project users should keep the workspace on row one: {text}"
+    );
+    assert!(
+        text.contains("1 · perky-b76d"),
+        "tab number and session nickname belong together on row two: {text}"
+    );
+    assert!(
+        !text.contains("slyce · perky-b76d"),
+        "identity must not collapse onto one truncated row: {text}"
     );
 }

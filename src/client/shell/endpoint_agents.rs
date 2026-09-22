@@ -82,8 +82,11 @@ pub(super) fn render_expanded(
                 );
             }
             if !row.agent.remote {
-                hits.endpoint_agents
-                    .push((rect, row.endpoint_id.clone(), row.agent.pane_id.clone()));
+                hits.endpoint_agents.push((
+                    rect,
+                    row.endpoint_id.clone(),
+                    row.agent.pane_id.clone(),
+                ));
             }
         },
     );
@@ -121,10 +124,7 @@ fn agent_rows(
     // rows in endpoint/snapshot order (including laptop-visible remotes).
     for row in super::aggregate_navigation::aggregate_agent_rows(endpoints, config.agent_panel_sort)
     {
-        ordered_keys.push((
-            row.endpoint.endpoint_id.clone(),
-            row.agent.pane_id.clone(),
-        ));
+        ordered_keys.push((row.endpoint.endpoint_id.clone(), row.agent.pane_id.clone()));
     }
     for endpoint in endpoints {
         if let Some(snapshot) = endpoint.snapshot.as_deref() {
@@ -141,7 +141,9 @@ fn agent_rows(
         .into_iter()
         .filter_map(|key| {
             let endpoint_id = key.0.clone();
-            let endpoint = endpoints.iter().find(|endpoint| endpoint.endpoint_id == endpoint_id)?;
+            let endpoint = endpoints
+                .iter()
+                .find(|endpoint| endpoint.endpoint_id == endpoint_id)?;
             let mut agent = rendered_rows.remove(&key)?;
             agent.focused &= &endpoint.endpoint_id == active_endpoint_id;
             Some(EndpointAgentRow {
