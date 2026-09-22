@@ -20,6 +20,7 @@ mod ids;
 pub(crate) mod pane_graphics;
 mod popup;
 mod presence_refresh;
+use presence_refresh::presence_refresh_interval;
 mod runtime;
 mod session;
 pub mod state;
