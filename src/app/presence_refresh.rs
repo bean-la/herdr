@@ -4,7 +4,7 @@ use super::App;
 use crate::events::AppEvent;
 use crate::presence::fetch_presence;
 
-fn presence_refresh_interval() -> Duration {
+pub(crate) fn presence_refresh_interval() -> Duration {
     std::env::var("HERM_PRESENCE_POLL_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
@@ -73,6 +73,7 @@ mod tests {
 
     fn remote(id: &str) -> RemoteAgent {
         RemoteAgent {
+            session_id: None,
             agent_id: id.into(),
             host: Some("herm-b".into()),
             project: "slyce".into(),

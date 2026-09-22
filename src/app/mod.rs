@@ -584,7 +584,9 @@ impl App {
             last_git_repo_discovery_refresh: Instant::now(),
             git_refresh_in_flight: false,
             git_refresh_due_after_in_flight: false,
-            last_presence_refresh: Instant::now(),
+            // Hydrate the parent projection immediately after a restart; subsequent
+            // refreshes remain interval-gated by the normal poll deadline.
+            last_presence_refresh: Instant::now() - presence_refresh_interval(),
             presence_in_flight: false,
             git_identity_refresh_requested: false,
             git_status_cache: HashMap::new(),

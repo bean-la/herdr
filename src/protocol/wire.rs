@@ -1081,6 +1081,8 @@ pub struct ClientShellAgent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClientShellRemoteAgent {
     pub agent_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     /// Host reported by the presence service. None means the source did not
     /// provide it; clients must not infer a host from an opaque agent id.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -245,6 +245,7 @@ pub(super) fn snapshot(
             .iter()
             .map(|agent| protocol::ClientShellRemoteAgent {
                 agent_id: agent.agent_id.clone(),
+                session_id: agent.session_id.clone(),
                 host: agent.host.clone(),
                 project: agent.project.clone(),
                 lane: agent.lane.clone(),

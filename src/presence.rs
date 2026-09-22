@@ -22,6 +22,9 @@ use std::time::Duration;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, serde::Serialize)]
 pub struct PresenceRow {
     pub agent_id: String,
+    /// Stable native session identity from herm-core; safe read-only metadata.
+    #[serde(default)]
+    pub session_id: Option<String>,
     #[serde(default)]
     pub project: Option<String>,
     #[serde(default)]
@@ -67,6 +70,7 @@ struct PresenceEnvelope {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct RemoteAgent {
     pub agent_id: String,
+    pub session_id: Option<String>,
     pub host: Option<String>,
     pub project: String,
     pub lane: String,
@@ -187,6 +191,7 @@ impl RemoteAgent {
                 .unwrap_or_else(|| derive_user(row.project.as_deref(), &row.agent_id)),
             host: row.host,
             agent_id: row.agent_id,
+            session_id: row.session_id,
             project,
             lane,
             status,

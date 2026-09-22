@@ -808,6 +808,7 @@ fn agent_remotes_toggle_hides_presence_and_persists_per_endpoint() {
     let mut projected = snapshot();
     projected.workspaces[0].label = "herm".into();
     projected.remote_agents = vec![crate::protocol::ClientShellRemoteAgent {
+            session_id: None,
         agent_id: "sebluair-herm-groovy-16be".into(),
         host: Some("sebluair".into()),
         project: "herm".into(),
@@ -1486,6 +1487,7 @@ fn semantic_notifications_use_client_policy_and_stable_navigation_targets() {
 
 fn remote_presence_agent() -> crate::protocol::ClientShellRemoteAgent {
     crate::protocol::ClientShellRemoteAgent {
+            session_id: None,
         agent_id: "herm-b-slyce-perky".into(),
         host: Some("herm-b".into()),
         project: "slyce".into(),
@@ -1784,6 +1786,7 @@ fn lane_tab_fallback_rows_show_workspace_tabs_without_detected_agents() {
         },
     ];
     projected.remote_agents.push(crate::protocol::ClientShellRemoteAgent {
+            session_id: None,
         agent_id: "herm-b-slyce-goaldaddy".into(),
         host: Some("herm-b".into()),
         project: "slyce".into(),
@@ -1830,6 +1833,7 @@ fn cross_host_presence_rows_label_host_and_lane() {
     let mut projected = snapshot();
     projected.workspaces[0].label = "slyce".into();
     projected.remote_agents = vec![crate::protocol::ClientShellRemoteAgent {
+            session_id: None,
         agent_id: "sebluair-slyce-moody-34e8".into(),
         host: Some("sebluair".into()),
         project: "slyce".into(),

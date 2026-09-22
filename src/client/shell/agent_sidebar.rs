@@ -582,7 +582,11 @@ fn remote_agent_rows<'a>(
             let status = remote_agent_status(&agent.status);
             let label = format!("{} · {}", agent.project, agent.lane);
             let kind = remote_agent_kind(agent);
-            let canonical_agent = (kind == "Pi").then_some(crate::detect::Agent::Pi);
+            // Remote presence rows are projected, not local panes. Do not
+            // apply canonical-agent row overrides (which are commonly
+            // single-line, agent-specific layouts) to them; otherwise the
+            // metadata row can collapse into a duplicate of the first row.
+            let canonical_agent = None;
             let mut tokens = HashMap::new();
             if let Some(memo) = agent
                 .session_memo
@@ -837,6 +841,7 @@ mod tests {
 
     fn remote(project: &str) -> crate::protocol::ClientShellRemoteAgent {
         crate::protocol::ClientShellRemoteAgent {
+            session_id: None,
             agent_id: "host-project-lane".into(),
             host: Some("host".into()),
             project: project.into(),

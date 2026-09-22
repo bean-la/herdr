@@ -63,6 +63,7 @@ fn laptop_remote_presence_rows_use_remote_layout_and_selector() {
     let mut remote_snapshot = snapshot();
     remote_snapshot.boot_id = "remote-presence-boot".into();
     remote_snapshot.remote_agents = vec![crate::protocol::ClientShellRemoteAgent {
+            session_id: None,
         agent_id: "laptop-slyce-pi-lane".into(),
         host: Some("laptop".into()),
         project: "slyce".into(),
