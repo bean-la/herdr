@@ -1942,27 +1942,29 @@ fn lane_tab_fallback_rows_show_workspace_tabs_without_detected_agents() {
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
     let frame = state.compose(106, 30).expect("lane tab fallback sidebar");
-    let text = frame
+    let sidebar_width = state.layout(frame.width, frame.height).sidebar.width as usize;
+    let sidebar_text = frame
         .cells
         .chunks(frame.width as usize)
         .map(|row| {
             row.iter()
+                .take(sidebar_width)
                 .map(|cell| cell.symbol.as_str())
                 .collect::<String>()
         })
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        text.contains("goaldaddy"),
-        "a live lane with matching presence should render as a local sidebar row: {text}"
+        sidebar_text.contains("goaldaddy"),
+        "a live lane with matching presence should render as a local sidebar row: {sidebar_text}"
     );
     assert!(
-        !text.contains("taskdaddy"),
-        "empty restored tabs without a live agent should stay out of the sidebar: {text}"
+        !sidebar_text.contains("taskdaddy"),
+        "empty restored tabs without a live agent should stay out of the sidebar: {sidebar_text}"
     );
     assert!(
-        !text.contains("remote"),
-        "fleet lanes on this server should not duplicate as remote presence rows: {text}"
+        !sidebar_text.contains("herm-b"),
+        "fleet lanes on this server should not duplicate as remote presence rows: {sidebar_text}"
     );
 }
 

@@ -227,15 +227,10 @@ fn agent_panel_remotes_label(remotes: crate::config::AgentPanelRemotesConfig) ->
 /// hosts, so fall back to the focused agent/pane workspace before filtering.
 fn effective_scope_workspace_id(snapshot: &ClientShellSnapshot) -> Option<&str> {
     snapshot
-        .focused_workspace_id
-        .as_deref()
-        .or_else(|| {
-            snapshot
-                .agents
-                .iter()
-                .find(|agent| agent.focused)
-                .map(|agent| agent.workspace_id.as_str())
-        })
+        .agents
+        .iter()
+        .find(|agent| agent.focused)
+        .map(|agent| agent.workspace_id.as_str())
         .or_else(|| {
             snapshot.focused_pane_id.as_deref().and_then(|pane_id| {
                 snapshot
@@ -245,6 +240,7 @@ fn effective_scope_workspace_id(snapshot: &ClientShellSnapshot) -> Option<&str> 
                     .map(|pane| pane.workspace_id.as_str())
             })
         })
+        .or(snapshot.focused_workspace_id.as_deref())
         .or_else(|| {
             snapshot
                 .workspaces
