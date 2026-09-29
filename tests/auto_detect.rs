@@ -255,7 +255,7 @@ fn session_attach_without_terminal_leaves_no_session() {
     };
     let session_dir = config_home.join(app_dir).join("sessions").join(name);
     let run = |args: &[&str]| {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_herdr"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_brndr"));
         command
             .args(args)
             .env("XDG_CONFIG_HOME", &config_home)
