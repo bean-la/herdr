@@ -8,18 +8,13 @@ use std::ffi::CStr;
 
 /// D126/D127: native remote-client-bridge is reserved for the herm service
 /// user (and root). A project user must never run it — it would spawn an
-/// independent project-user herdr server (the D126 isolation violation seen
-/// via `brndr --remote slyce@herm-b`). Route project users through the scoped
-/// `brn o --remote` (boot.ts → attach-proxy) path instead.
-///
-/// Native `--remote herm-b` as the herm service user remains allowed.
+/// independent project-user herdr server. Project users use the scoped
+/// attach-proxy path instead.
 #[cfg(unix)]
 fn native_remote_allowed_for(effective_user: &str) -> bool {
     effective_user == "herm" || effective_user == "root"
 }
 
-/// Resolve the effective username from getpwuid(geteuid()) — NOT the
-/// spoofable $USER env var.
 #[cfg(unix)]
 fn effective_username() -> Option<String> {
     unsafe {
@@ -36,7 +31,23 @@ fn effective_username() -> Option<String> {
     }
 }
 
-pub(crate) fn run_remote_client_bridge() -> io::Result<()> {
+pub(crate) fn run_remote_client_bridge(args: &[String]) -> io::Result<()> {
+    let idle_timeout = match args {
+        [] => false,
+        [option]
+            if option == "--idle-timeout-v1"
+                && crate::platform::REMOTE_BRIDGE_IDLE_TIMEOUT_SUPPORTED =>
+        {
+            true
+        }
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "unsupported remote client bridge option",
+            ))
+        }
+    };
+
     #[cfg(unix)]
     if let Some(user) = effective_username() {
         if !native_remote_allowed_for(&user) {
@@ -52,6 +63,8 @@ pub(crate) fn run_remote_client_bridge() -> io::Result<()> {
     }
 
     ensure_remote_server_running()?;
+    #[cfg(unix)]
+    let _ssh_agent = super::ssh_agent::Registration::start();
 
     let socket_path = crate::server::socket_paths::client_socket_path();
     let stream = crate::ipc::connect_local_stream(&socket_path).map_err(|err| {
@@ -64,7 +77,7 @@ pub(crate) fn run_remote_client_bridge() -> io::Result<()> {
         )
     })?;
 
-    crate::platform::forward_remote_bridge_stdio(stream)
+    crate::platform::forward_remote_bridge_stdio(stream, idle_timeout)
 }
 
 fn ensure_remote_server_running() -> io::Result<()> {

@@ -17,7 +17,6 @@ mod creation;
 mod custom_commands;
 mod git_refresh;
 mod ids;
-pub(crate) mod pane_graphics;
 mod popup;
 mod presence_refresh;
 use presence_refresh::presence_refresh_interval;
@@ -105,9 +104,6 @@ impl AppPolicy {
 
 pub struct App {
     pub state: AppState,
-    pub(crate) pane_graphics: pane_graphics::Runtime,
-    pub(crate) pane_graphics_files: Arc<crate::pane_graphics_files::FileStore>,
-    pub(crate) direct_graphics_available: bool,
     pub(crate) pixel_mouse_available: bool,
     pub(crate) terminal_runtimes: crate::terminal::TerminalRuntimeRegistry,
     pub event_tx: mpsc::Sender<AppEvent>,
@@ -128,6 +124,7 @@ pub struct App {
     pub(crate) git_identity_refresh_requested: bool,
     pub(crate) git_status_cache: HashMap<std::path::PathBuf, crate::workspace::GitStatusCacheEntry>,
     pub(crate) pending_api_worktree_creates: HashMap<std::path::PathBuf, u64>,
+    pub(crate) worktree_read_slots: std::sync::Arc<tokio::sync::Semaphore>,
     pub(crate) pending_api_worktree_removes: HashMap<String, u64>,
     pub(crate) pending_api_worktree_remove_paths: HashMap<std::path::PathBuf, u64>,
     pub(crate) pending_worktree_remove_runtime_exits: HashMap<crate::layout::PaneId, usize>,
@@ -140,8 +137,11 @@ pub struct App {
     pub(crate) loaded_host_cursor: crate::config::HostCursorModeConfig,
     pub(crate) agent_metadata_deadline: Option<Instant>,
     pub(crate) pending_agent_resume_deadline: Option<Instant>,
+    startup_per_agent_delay: Duration,
+    next_agent_resume_at: Option<Instant>,
     pub(crate) session_save_deadline: Option<Instant>,
     pub(crate) session_save_thread: Option<std::thread::JoinHandle<()>>,
+    session_writer: Arc<std::sync::Mutex<crate::persist::SessionWriter>>,
     pane_exit_checkpoint_pending: bool,
     pub(crate) detached_process_children: Vec<std::process::Child>,
     tab_bar_status_generation: u64,
@@ -365,7 +365,7 @@ impl App {
         api_rx: tokio::sync::mpsc::UnboundedReceiver<crate::api::ApiRequestMessage>,
         event_hub: crate::api::EventHub,
     ) -> Self {
-        let (prefix_code, prefix_mods) = config.prefix_key();
+        let prefix_keys = config.prefix_keys();
         crate::kitty_graphics::set_enabled(config.kitty_graphics_enabled());
         let (event_tx, event_rx) = mpsc::channel::<AppEvent>(APP_EVENT_CHANNEL_CAPACITY);
         let render_notify = Arc::new(Notify::new());
@@ -374,15 +374,11 @@ impl App {
         // Try to restore previous session
         let mut restored_terminals = std::collections::HashMap::new();
         let mut restored_terminal_runtimes = crate::terminal::TerminalRuntimeRegistry::new();
-        let (workspaces, active, selected, pinned, pinned_panes) = if !policy.restore_session {
-            (
-                Vec::new(),
-                None,
-                0,
-                Vec::new(),
-                std::collections::HashMap::new(),
-            )
-        } else if let Some(snap) = crate::persist::load() {
+        let snapshot = policy.restore_session.then(crate::persist::load).flatten();
+        let session_writer = Arc::new(std::sync::Mutex::new(crate::persist::SessionWriter::new(
+            policy.restore_session && snapshot.is_none(),
+        )));
+        let (workspaces, active, selected, pinned, pinned_panes) = if let Some(snap) = snapshot {
             let history = config
                 .experimental
                 .pane_history
@@ -495,8 +491,7 @@ impl App {
             toast: None,
             pending_agent_notifications: std::collections::HashMap::new(),
             outer_terminal_focus: None,
-            prefix_code,
-            prefix_mods,
+            prefix_keys,
             headless_size: config.headless_size(),
             agent_panel_sort,
             agent_view_override: None,
@@ -596,9 +591,6 @@ impl App {
             toast_deadline: None,
             last_api_notification_at: None,
             state,
-            pane_graphics: pane_graphics::Runtime::default(),
-            pane_graphics_files: Arc::new(crate::pane_graphics_files::FileStore::default()),
-            direct_graphics_available: false,
             pixel_mouse_available: false,
             terminal_runtimes: restored_terminal_runtimes,
             event_tx,
@@ -614,6 +606,7 @@ impl App {
             git_identity_refresh_requested: false,
             git_status_cache: HashMap::new(),
             pending_api_worktree_creates: HashMap::new(),
+            worktree_read_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(8)),
             pending_api_worktree_removes: HashMap::new(),
             pending_api_worktree_remove_paths: HashMap::new(),
             pending_worktree_remove_runtime_exits: HashMap::new(),
@@ -628,8 +621,13 @@ impl App {
             loaded_host_cursor: config.ui.host_cursor,
             agent_metadata_deadline: None,
             pending_agent_resume_deadline: None,
+            startup_per_agent_delay: Duration::from_millis(
+                config.session.startup_per_agent_delay_ms.into(),
+            ),
+            next_agent_resume_at: None,
             session_save_deadline: None,
             session_save_thread: None,
+            session_writer,
             pane_exit_checkpoint_pending: false,
             detached_process_children: Vec::new(),
             tab_bar_status_generation: 0,
@@ -833,8 +831,7 @@ impl App {
         if !invalid_section("keys") {
             match config.live_keybinds_with_diagnostics() {
                 Ok((live, keybind_diagnostics)) => {
-                    self.state.prefix_code = live.prefix.0;
-                    self.state.prefix_mods = live.prefix.1;
+                    self.state.prefix_keys = live.prefix;
                     self.state.keybinds = live.keybinds;
                     match config.local_keybindings_profile_toml() {
                         Ok(profile) => self.client_shell_keybindings_profile = Some(profile),
@@ -890,6 +887,16 @@ impl App {
                 self.state.sound = config.ui.sound.clone();
                 self.state.toast_config = config.ui.toast.clone();
             }
+        }
+
+        if !invalid_section("session")
+            && Duration::from_millis(config.session.startup_per_agent_delay_ms.into())
+                != self.startup_per_agent_delay
+        {
+            diagnostics.push(
+                "session.startup_per_agent_delay_ms changes require restarting Herdr; kept current setting"
+                    .into(),
+            );
         }
 
         let graphics_config_valid = !invalid_section("terminal")
@@ -1730,8 +1737,10 @@ mod tests {
 
         assert_eq!(report.status, crate::config::ConfigReloadStatus::Applied);
         assert_eq!(app.state.headless_size, (160, 50));
-        assert_eq!(app.state.prefix_code, KeyCode::Char('a'));
-        assert_eq!(app.state.prefix_mods, KeyModifiers::CONTROL);
+        assert_eq!(
+            app.state.prefix_keys,
+            vec![(KeyCode::Char('a'), KeyModifiers::CONTROL)]
+        );
         assert!(app
             .state
             .keybinds
@@ -1796,6 +1805,26 @@ mod tests {
     }
 
     #[test]
+    fn reload_config_reports_startup_delay_requires_restart() {
+        let mut app = test_app();
+        let mut config = Config::default();
+        let report = app.apply_live_config(&config, &[], &[], false);
+        assert_eq!(report.status, crate::config::ConfigReloadStatus::Applied);
+
+        config.session.startup_per_agent_delay_ms = 250;
+        let report = app.apply_live_config(&config, &[], &[], false);
+        assert_eq!(report.status, crate::config::ConfigReloadStatus::Partial);
+        assert_eq!(app.startup_per_agent_delay, Duration::from_millis(100));
+        assert_eq!(report.diagnostics, vec![
+            "session.startup_per_agent_delay_ms changes require restarting Herdr; kept current setting"
+        ]);
+
+        let report = app.apply_live_config(&config, &[], &["session".into()], false);
+        assert!(report.diagnostics.is_empty());
+        assert_eq!(app.startup_per_agent_delay, Duration::from_millis(100));
+    }
+
+    #[test]
     fn reload_config_requests_client_reload_for_key_only_change() {
         let _guard = config_env_lock().lock().unwrap();
         let path = temp_config_path("reload-config-key-only");
@@ -1808,7 +1837,10 @@ mod tests {
         let report = app.reload_config();
 
         assert_eq!(report.status, crate::config::ConfigReloadStatus::Applied);
-        assert_eq!(app.state.prefix_code, KeyCode::Char('a'));
+        assert_eq!(
+            app.state.prefix_keys,
+            vec![(KeyCode::Char('a'), KeyModifiers::CONTROL)]
+        );
         assert!(app.state.request_client_config_reload);
 
         std::env::remove_var(crate::config::CONFIG_PATH_ENV_VAR);
@@ -1963,17 +1995,14 @@ mod tests {
         std::env::set_var(crate::config::CONFIG_PATH_ENV_VAR, &path);
 
         let mut app = test_app();
-        let original_prefix = (app.state.prefix_code, app.state.prefix_mods);
+        let original_prefix = app.state.prefix_keys.clone();
         let report = app.reload_config();
 
         assert_eq!(report.status, crate::config::ConfigReloadStatus::Partial);
         assert!(report.diagnostics.iter().any(|diagnostic| {
             diagnostic.contains("keys.new_workspace") && diagnostic.contains("disabling binding")
         }));
-        assert_eq!(
-            (app.state.prefix_code, app.state.prefix_mods),
-            original_prefix
-        );
+        assert_eq!(app.state.prefix_keys, original_prefix);
         assert!(app.state.keybinds.new_workspace.bindings.is_empty());
         assert_eq!(
             app.state.toast_config.delivery,
@@ -2031,8 +2060,10 @@ mod tests {
         let report = app.reload_config();
 
         assert_eq!(report.status, crate::config::ConfigReloadStatus::Applied);
-        assert_eq!(app.state.prefix_code, KeyCode::Char(' '));
-        assert_eq!(app.state.prefix_mods, KeyModifiers::CONTROL);
+        assert_eq!(
+            app.state.prefix_keys,
+            vec![(KeyCode::Char(' '), KeyModifiers::CONTROL)]
+        );
         assert!(app
             .state
             .keybinds
@@ -2121,16 +2152,13 @@ mod tests {
         std::env::set_var(crate::config::CONFIG_PATH_ENV_VAR, &path);
 
         let mut app = test_app();
-        let original_prefix = (app.state.prefix_code, app.state.prefix_mods);
+        let original_prefix = app.state.prefix_keys.clone();
         let original_keybinds = app.state.keybinds.new_workspace.clone();
         let original_toast_delivery = app.state.toast_config.delivery;
         let report = app.reload_config();
 
         assert_eq!(report.status, crate::config::ConfigReloadStatus::Failed);
-        assert_eq!(
-            (app.state.prefix_code, app.state.prefix_mods),
-            original_prefix
-        );
+        assert_eq!(app.state.prefix_keys, original_prefix);
         assert_eq!(app.state.keybinds.new_workspace, original_keybinds);
         assert_eq!(app.state.toast_config.delivery, original_toast_delivery);
         assert!(app

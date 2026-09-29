@@ -13,8 +13,8 @@ const DEFAULT_CELL_HEIGHT_PX: u32 = 16;
 
 /// Average cell size derived from a terminal ioctl pixel extent.
 ///
-/// The extent need not divide evenly by the grid: terminals may include padding,
-/// and pixel mouse coordinates retain the raw extent for proportional mapping.
+/// The extent need not divide evenly by the grid because terminals may include
+/// padding; mouse mapping uses the resulting integer cell pitch.
 pub(super) fn ioctl_cell_size(
     columns: u16,
     rows: u16,
@@ -190,10 +190,6 @@ pub(super) fn write_host_terminal_appearance_query(mut writer: impl io::Write) -
 
 pub(super) fn query_host_terminal_theme() {
     let _ = write_host_terminal_theme_query(io::stdout());
-}
-
-pub(super) fn should_query_host_terminal_theme() -> bool {
-    !cfg!(windows)
 }
 
 pub(super) fn write_host_terminal_theme_query(mut writer: impl io::Write) -> io::Result<()> {

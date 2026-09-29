@@ -92,6 +92,41 @@ pub(super) fn render_expanded(
     );
 }
 
+impl ClientShellState {
+    pub(super) fn reveal_endpoint_agent(
+        &mut self,
+        endpoint_id: &ClientEndpointId,
+        pane_id: &str,
+        body_height: u16,
+    ) {
+        if body_height == 0 {
+            return;
+        }
+        let rows = agent_rows(&self.endpoints, &self.active_endpoint_id, &self.config);
+        let Some(target) = rows
+            .iter()
+            .position(|row| &row.endpoint_id == endpoint_id && row.agent.pane_id == pane_id)
+        else {
+            return;
+        };
+        let heights = rows
+            .iter()
+            .map(|row| row.agent.rows.len().max(1).min(u16::MAX as usize) as u16)
+            .collect::<Vec<_>>();
+        let mut gaps = vec![self.config.agents.row_gap; rows.len()];
+        if let Some(last) = gaps.last_mut() {
+            *last = 0;
+        }
+        self.agent_scroll = super::scroll::list_scroll_start_to_reveal(
+            &heights,
+            &gaps,
+            body_height,
+            self.agent_scroll,
+            target,
+        );
+    }
+}
+
 struct EndpointAgentRow {
     endpoint_id: ClientEndpointId,
     machine_label: String,
@@ -118,12 +153,13 @@ fn agent_rows(
         .collect::<HashMap<_, _>>();
     let mut ordered_keys = Vec::new();
 
-    // Aggregate navigation orders local pane agents, but remote presence rows
-    // intentionally have no pane and therefore never appear in that list.
-    // Keep the aggregate ordering for local rows, then append all remaining
-    // rows in endpoint/snapshot order (including laptop-visible remotes).
-    for row in super::aggregate_navigation::aggregate_agent_rows(endpoints, config.agent_panel_sort)
-    {
+    // Aggregate navigation orders pane-backed agents. Presence and lane-tab rows
+    // are not pane targets, so append them in endpoint snapshot order afterward.
+    for row in super::aggregate_navigation::aggregate_agent_rows(
+        endpoints,
+        active_endpoint_id,
+        config.agent_panel_sort,
+    ) {
         ordered_keys.push((row.endpoint.endpoint_id.clone(), row.agent.pane_id.clone()));
     }
     for endpoint in endpoints {
@@ -140,18 +176,17 @@ fn agent_rows(
     ordered_keys
         .into_iter()
         .filter_map(|key| {
-            let endpoint_id = key.0.clone();
             let endpoint = endpoints
                 .iter()
-                .find(|endpoint| endpoint.endpoint_id == endpoint_id)?;
+                .find(|endpoint| endpoint.endpoint_id == key.0)?;
             let mut agent = rendered_rows.remove(&key)?;
             agent.focused &= &endpoint.endpoint_id == active_endpoint_id;
             Some(EndpointAgentRow {
-                endpoint_id,
+                endpoint_id: endpoint.endpoint_id.clone(),
                 machine_label: endpoint.label.clone(),
-                stale: endpoint.status != ClientEndpointStatus::Online,
+                stale: endpoint.stale(),
                 agent,
             })
         })
-        .collect()
+    .collect()
 }
