@@ -1117,7 +1117,12 @@ exec /bin/sh -c "$last"
             .trim()
             .parse()
             .unwrap();
-        assert_eq!(unsafe { libc::kill(pid, libc::SIGTERM) }, 0);
+        let killed = std::process::Command::new("sudo")
+            .args(["-n", "kill", "-TERM"])
+            .arg(pid.to_string())
+            .status()
+            .expect("passwordless sudo should launch kill");
+        assert!(killed.success(), "failed to stop root bridge process {pid}");
         let marker = format!("REMOTE_RECONNECTED_{cycle}");
         send_pane_shell_command(&remote_api, remote_pane, &format!("printf '{marker}\\n'"));
         assert!(

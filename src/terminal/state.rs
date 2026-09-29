@@ -2391,6 +2391,7 @@ impl TerminalState {
     pub fn clear_stale_agent_name_if_undetected(&mut self) -> bool {
         if self.agent_name.is_some()
             && self.managed_agent.is_none()
+            && self.agent_name_owner.is_none()
             && self.effective_known_agent().is_none()
         {
             self.clear_agent_name();
@@ -2547,6 +2548,17 @@ mod tests {
         );
 
         assert!(!terminal.reconcile_managed_agent_at(now, false));
+        assert!(!terminal.clear_stale_agent_name_if_undetected());
+        assert_eq!(terminal.agent_name.as_deref(), Some("reviewer"));
+    }
+
+    #[test]
+    fn assigned_agent_name_survives_temporary_detection_gap() {
+        let mut terminal = test_terminal();
+        terminal.set_detected_state(Some(Agent::Pi), AgentState::Working);
+        terminal.set_agent_name("reviewer".into());
+        terminal.set_detected_state(None, AgentState::Unknown);
+
         assert!(!terminal.clear_stale_agent_name_if_undetected());
         assert_eq!(terminal.agent_name.as_deref(), Some("reviewer"));
     }
