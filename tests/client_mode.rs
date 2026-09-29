@@ -1037,6 +1037,7 @@ fn federated_client_starts_without_local_and_survives_its_restart() {
         .join(app_dir_name())
         .join("client");
     fs::create_dir_all(&catalog_dir).unwrap();
+    let endpoint_selection_path = catalog_dir.join("endpoint-selection.json");
     let profile = "0123456789abcdef0123456789abcdef";
     fs::write(catalog_dir.join("endpoints.json"), serde_json::json!({
         "version": 1, "selected_profile": profile,
@@ -1216,6 +1217,8 @@ exec /bin/sh -c "$last"
         screen_text()
     );
     let local_pane = created["result"]["root_pane"]["pane_id"].as_str().unwrap();
+    // Seed the local screen before activation; inactive endpoint terminal frames are intentionally
+    // dropped until the Local presentation lease commits.
     send_pane_shell_command(
         &api_socket,
         local_pane,
@@ -1242,6 +1245,16 @@ exec /bin/sh -c "$last"
         input
             .write_all(&sidebar_row_click(&screen_text(), "Local"))
             .unwrap();
+        assert!(
+            wait_until(Duration::from_secs(3), Duration::from_millis(20), || {
+                fs::read_to_string(&endpoint_selection_path)
+                    .ok()
+                    .and_then(|contents| serde_json::from_str::<serde_json::Value>(&contents).ok())
+                    .is_some_and(|selection| selection["selected_profile"].is_null())
+            }),
+            "Local endpoint selection was not recorded: {}",
+            fs::read_to_string(&endpoint_selection_path).unwrap_or_default()
+        );
         assert!(
             wait_until(Duration::from_secs(3), Duration::from_millis(20), || {
                 screen_text().contains("LOCAL_WHILE_REMOTE_STALLED")
