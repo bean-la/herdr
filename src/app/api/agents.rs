@@ -613,7 +613,7 @@ mod tests {
             &mut app,
             "req-label",
             AgentPromptParams {
-                target: "opencode".into(),
+                target: "missing-agent".into(),
                 text: "wrong target".into(),
                 wait: None,
             },

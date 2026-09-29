@@ -25,6 +25,14 @@ use support::{
     SERVER_MESSAGE_SERVER_SHUTDOWN,
 };
 
+fn signal_root_process(pid: libc::pid_t, signal: &str) -> bool {
+    std::process::Command::new("sudo")
+        .args(["-n", "kill", signal])
+        .arg(pid.to_string())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
 fn unique_test_dir() -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1117,12 +1125,10 @@ exec /bin/sh -c "$last"
             .trim()
             .parse()
             .unwrap();
-        let killed = std::process::Command::new("sudo")
-            .args(["-n", "kill", "-TERM"])
-            .arg(pid.to_string())
-            .status()
-            .expect("passwordless sudo should launch kill");
-        assert!(killed.success(), "failed to stop root bridge process {pid}");
+        assert!(
+            signal_root_process(pid, "-TERM"),
+            "failed to stop root bridge process {pid}"
+        );
         let marker = format!("REMOTE_RECONNECTED_{cycle}");
         send_pane_shell_command(&remote_api, remote_pane, &format!("printf '{marker}\\n'"));
         assert!(
@@ -1219,7 +1225,7 @@ exec /bin/sh -c "$last"
         struct ResumeBridge(libc::pid_t);
         impl Drop for ResumeBridge {
             fn drop(&mut self) {
-                unsafe { libc::kill(self.0, libc::SIGCONT) };
+                let _ = signal_root_process(self.0, "-CONT");
             }
         }
         let bridge: libc::pid_t = fs::read_to_string(&bridge_pid)
@@ -1227,7 +1233,10 @@ exec /bin/sh -c "$last"
             .trim()
             .parse()
             .unwrap();
-        assert_eq!(unsafe { libc::kill(bridge, libc::SIGSTOP) }, 0);
+        assert!(
+            signal_root_process(bridge, "-STOP"),
+            "failed to stop root bridge process {bridge}"
+        );
         let _resume_bridge = ResumeBridge(bridge);
         input
             .write_all(&sidebar_row_click(&screen_text(), "local-returned"))
