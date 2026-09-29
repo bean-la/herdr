@@ -472,6 +472,7 @@ mod tests {
         let mut app = test_app(&crate::config::Config::default());
         app.state.workspaces.push(Workspace::test_new("test"));
         let now = Instant::now();
+        app.presence_in_flight = true;
         app.last_git_remote_status_refresh =
             now - GIT_REMOTE_STATUS_REFRESH_INTERVAL - Duration::from_secs(1);
 

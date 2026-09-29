@@ -3064,6 +3064,7 @@ mod tests {
     fn headless_next_loop_deadline_ignores_resize_poll() {
         let mut app = test_app();
         let now = Instant::now();
+        app.presence_in_flight = true;
         app.session_save_deadline = Some(now + Duration::from_secs(2));
         app.next_auto_update_check = Some(now + Duration::from_secs(6));
 
@@ -3081,6 +3082,7 @@ mod tests {
         app.toast_deadline = None;
         app.next_auto_update_check = None;
         app.session_save_deadline = None;
+        app.presence_in_flight = true;
         app.state.workspaces.clear();
 
         assert_eq!(
