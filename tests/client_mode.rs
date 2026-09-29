@@ -986,6 +986,14 @@ fn federated_client_starts_without_local_and_survives_its_restart() {
     use std::os::unix::fs::PermissionsExt;
 
     let _lock = test_lock();
+    let sudo_available = std::process::Command::new("sudo")
+        .args(["-n", "true"])
+        .status()
+        .is_ok_and(|status| status.success());
+    if !sudo_available {
+        eprintln!("skipping native remote bridge lifecycle test: passwordless sudo unavailable");
+        return;
+    }
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
@@ -1037,10 +1045,34 @@ fn federated_client_starts_without_local_and_survives_its_restart() {
         |path: &std::path::Path| format!("'{}'", path.display().to_string().replace('\'', "'\\''"));
     let ssh_commands = base.join("ssh-commands");
     let bridge_pid = base.join("bridge-pid");
-    fs::write(bin.join("ssh"), format!(
-        "#!/bin/sh\nexport HOME={} XDG_CONFIG_HOME={} XDG_RUNTIME_DIR={} HERDR_SOCKET_PATH={}\nunset HERDR_CLIENT_SOCKET_PATH HERDR_SESSION\nfor arg do last=\"$arg\"; done\nprintf '%s\\n' \"$last\" >> {}\ncase \"$last\" in *remote-client-bridge*) printf '%s\\n' \"$$\" > {};; esac\nexec /bin/sh -c \"$last\"\n",
-        quote(&base.join("home")), quote(&remote_config), quote(&remote_runtime), quote(&remote_api), quote(&ssh_commands), quote(&bridge_pid),
-    )).unwrap();
+    fs::write(
+        bin.join("ssh"),
+        format!(
+            r#"#!/bin/sh
+export HOME={} XDG_CONFIG_HOME={} XDG_RUNTIME_DIR={} HERDR_SOCKET_PATH={}
+unset HERDR_CLIENT_SOCKET_PATH HERDR_SESSION
+for arg do last="$arg"; done
+printf '%s\n' "$last" >> {}
+case "$last" in
+    *remote-client-bridge*)
+        exec sudo -n /usr/bin/env HOME={} XDG_CONFIG_HOME={} XDG_RUNTIME_DIR={} HERDR_SOCKET_PATH={} PATH="$PATH" BRIDGE_PID_FILE={} REMOTE_COMMAND="$last" /bin/sh -c 'unset HERDR_CLIENT_SOCKET_PATH HERDR_SESSION; printf "%s\n" "$$" > "$BRIDGE_PID_FILE"; exec /bin/sh -c "$REMOTE_COMMAND"'
+        ;;
+esac
+exec /bin/sh -c "$last"
+"#,
+            quote(&base.join("home")),
+            quote(&remote_config),
+            quote(&remote_runtime),
+            quote(&remote_api),
+            quote(&ssh_commands),
+            quote(&base.join("home")),
+            quote(&remote_config),
+            quote(&remote_runtime),
+            quote(&remote_api),
+            quote(&bridge_pid),
+        ),
+    )
+    .unwrap();
     fs::set_permissions(bin.join("ssh"), fs::Permissions::from_mode(0o700)).unwrap();
     let path = format!(
         "{}:{}",

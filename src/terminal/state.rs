@@ -2389,7 +2389,10 @@ impl TerminalState {
     /// no agent is currently detected. This covers labels restored from a
     /// previous session whose managed-agent lifecycle record is gone.
     pub fn clear_stale_agent_name_if_undetected(&mut self) -> bool {
-        if self.agent_name.is_some() && self.effective_known_agent().is_none() {
+        if self.agent_name.is_some()
+            && self.managed_agent.is_none()
+            && self.effective_known_agent().is_none()
+        {
             self.clear_agent_name();
             return true;
         }
@@ -2529,6 +2532,23 @@ mod tests {
             agent: agent_label.into(),
             session_ref,
         });
+    }
+
+    #[test]
+    fn managed_agent_name_survives_temporary_detection_gap() {
+        let mut terminal = test_terminal();
+        let now = Instant::now();
+        terminal.begin_managed_agent(
+            "reviewer".into(),
+            Agent::Pi,
+            now,
+            Duration::from_millis(100),
+            Duration::from_secs(1),
+        );
+
+        assert!(!terminal.reconcile_managed_agent_at(now, false));
+        assert!(!terminal.clear_stale_agent_name_if_undetected());
+        assert_eq!(terminal.agent_name.as_deref(), Some("reviewer"));
     }
 
     #[test]

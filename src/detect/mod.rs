@@ -1791,6 +1791,7 @@ mod tests {
         assert!(!session_sidebar_agent_identity("herdr:pi", "pi"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn identify_agent_in_job_resolves_cursor_agent_symlink_argv0() {
         let dir = temp_detection_path("cursor-agent-symlink");

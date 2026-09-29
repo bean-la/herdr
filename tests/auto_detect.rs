@@ -31,6 +31,14 @@ fn unique_test_dir() -> PathBuf {
     ))
 }
 
+fn app_config_dir(config_home: &Path) -> PathBuf {
+    config_home.join(if cfg!(debug_assertions) {
+        "herdr-dev"
+    } else {
+        "herdr"
+    })
+}
+
 struct SpawnedHerdr {
     _master: Box<dyn MasterPty + Send>,
     child: Box<dyn Child + Send + Sync>,
@@ -87,11 +95,11 @@ fn spawn_server(
     api_socket_path: &Path,
     _client_socket_path: &Path,
 ) -> SpawnedHerdr {
-    fs::create_dir_all(config_home.join("herdr")).unwrap();
+    fs::create_dir_all(app_config_dir(config_home)).unwrap();
     fs::create_dir_all(runtime_dir).unwrap();
     register_runtime_dir(runtime_dir);
     fs::write(
-        config_home.join("herdr/config.toml"),
+        app_config_dir(config_home).join("config.toml"),
         "onboarding = false\n",
     )
     .unwrap();
@@ -131,11 +139,11 @@ fn spawn_herdr_auto(
     api_socket_path: &Path,
     _client_socket_path: &Path,
 ) -> SpawnedHerdr {
-    fs::create_dir_all(config_home.join("herdr")).unwrap();
+    fs::create_dir_all(app_config_dir(config_home)).unwrap();
     fs::create_dir_all(runtime_dir).unwrap();
     register_runtime_dir(runtime_dir);
     fs::write(
-        config_home.join("herdr/config.toml"),
+        app_config_dir(config_home).join("config.toml"),
         "onboarding = false\n",
     )
     .unwrap();
@@ -651,12 +659,7 @@ fn auto_detect_writes_client_and_server_logs_to_separate_files() {
     wait_for_socket(&api_socket, Duration::from_secs(10));
     wait_for_socket(&client_socket, Duration::from_secs(10));
 
-    let app_dir_name = if cfg!(debug_assertions) {
-        "herdr-dev"
-    } else {
-        "herdr"
-    };
-    let log_dir = config_home.join(app_dir_name);
+    let log_dir = app_config_dir(&config_home);
     let client_log = log_dir.join("herdr-client.log");
     let server_log = log_dir.join("herdr-server.log");
     let monolith_log = log_dir.join("herdr.log");
