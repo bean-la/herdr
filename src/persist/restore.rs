@@ -340,9 +340,7 @@ fn restore_pinned_panes(
             if let Some(session) = restored_agent_session {
                 terminal.set_persisted_agent_session(session);
             }
-            if let (Some(agent_name), Some(agent)) =
-                (saved_agent_name, saved_managed_agent)
-            {
+            if let (Some(agent_name), Some(agent)) = (saved_agent_name, saved_managed_agent) {
                 terminal.restore_managed_agent(agent_name, agent);
             }
             if let Some(agent) = initial_restore_agent {
@@ -386,8 +384,7 @@ fn restore_pinned_panes(
                     if let Some(session) = restored_agent_session {
                         terminal.set_persisted_agent_session(session);
                     }
-                    if let (Some(agent_name), Some(agent)) =
-                        (saved_agent_name, saved_managed_agent)
+                    if let (Some(agent_name), Some(agent)) = (saved_agent_name, saved_managed_agent)
                     {
                         terminal.restore_managed_agent(agent_name, agent);
                     }
