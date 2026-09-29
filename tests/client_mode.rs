@@ -1169,11 +1169,6 @@ exec /bin/sh -c "$last"
         Duration::from_millis(20),
         || screen_text().contains("local-online")
     ));
-    assert!(wait_until(
-        Duration::from_secs(10),
-        Duration::from_millis(20),
-        || screen_text().contains("local-returned")
-    ));
 
     local.child.kill().unwrap();
     local.close_master();
@@ -1243,8 +1238,9 @@ exec /bin/sh -c "$last"
             "failed to stop root bridge process {bridge}"
         );
         let _resume_bridge = ResumeBridge(bridge);
+        // Select the endpoint row itself; Local's workspace group may be collapsed.
         input
-            .write_all(&sidebar_row_click(&screen_text(), "local-returned"))
+            .write_all(&sidebar_row_click(&screen_text(), "Local"))
             .unwrap();
         assert!(
             wait_until(Duration::from_secs(3), Duration::from_millis(20), || {
