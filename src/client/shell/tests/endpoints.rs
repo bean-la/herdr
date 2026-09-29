@@ -142,6 +142,9 @@ fn laptop_remote_presence_rows_use_remote_layout_and_selector() {
         !hidden_text.contains("pi-lane"),
         "selector should hide remotes: {hidden_text}"
     );
+}
+
+#[test]
 fn machine_diagnostic_badge_reopens_notice_without_collapsing_machine() {
     let (mut state, id) = state_with_remote();
     state.set_endpoint_status(&id, ClientEndpointStatus::Attention);

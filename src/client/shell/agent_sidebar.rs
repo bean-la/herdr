@@ -711,6 +711,8 @@ fn remote_agent_status(status: &str) -> crate::api::schema::AgentStatus {
         "done" => crate::api::schema::AgentStatus::Done,
         _ => crate::api::schema::AgentStatus::Idle,
     }
+}
+
 pub(super) fn agent_row(
     snapshot: &ClientShellSnapshot,
     pane_id: &str,
