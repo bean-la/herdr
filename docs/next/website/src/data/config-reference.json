@@ -1045,6 +1045,26 @@
           ]
         },
         {
+          "key": "ui.agent_panel_scope",
+          "type": "enum",
+          "default": "\"all\"",
+          "description": "Scope of agent sidebar rows. Default: all.",
+          "values": [
+            "all",
+            "active_workspace"
+          ]
+        },
+        {
+          "key": "ui.agent_panel_remotes",
+          "type": "enum",
+          "default": "\"show\"",
+          "description": "Whether presence/remote rows appear in the agent sidebar. Default: show.",
+          "values": [
+            "show",
+            "hide"
+          ]
+        },
+        {
           "key": "ui.status_indicators",
           "type": "enum",
           "default": "\"dots\"",

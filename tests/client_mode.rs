@@ -1239,7 +1239,7 @@ exec /bin/sh -c "$last"
         );
         let _resume_bridge = ResumeBridge(bridge);
         input
-            .write_all(&sidebar_row_click(&screen_text(), "local-returned"))
+            .write_all(&sidebar_row_click(&screen_text(), "Local"))
             .unwrap();
         assert!(
             wait_until(Duration::from_secs(3), Duration::from_millis(20), || {

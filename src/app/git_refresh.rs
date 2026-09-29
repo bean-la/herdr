@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+#[cfg(test)]
+use std::time::Duration;
 use std::time::Instant;
 
 use super::{App, GIT_REMOTE_STATUS_REFRESH_INTERVAL, GIT_REPO_DISCOVERY_REFRESH_INTERVAL};
@@ -470,15 +472,19 @@ mod tests {
         let mut app = test_app(&crate::config::Config::default());
         app.state.workspaces.push(Workspace::test_new("test"));
         let now = Instant::now();
-        app.last_git_remote_status_refresh = now - GIT_REMOTE_STATUS_REFRESH_INTERVAL;
+        app.last_git_remote_status_refresh =
+            now - GIT_REMOTE_STATUS_REFRESH_INTERVAL - Duration::from_secs(1);
 
         assert_eq!(
             app.next_headless_loop_deadline_with_git_refresh(now, false, false),
             None
         );
-        assert_eq!(
-            app.next_headless_loop_deadline_with_git_refresh(now, false, true),
-            Some(now)
+        let deadline = app
+            .next_headless_loop_deadline_with_git_refresh(now, false, true)
+            .expect("due git refresh should schedule a deadline");
+        assert!(
+            deadline < now,
+            "due git refresh deadline {deadline:?} should be in the past relative to {now:?}"
         );
     }
 
