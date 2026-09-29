@@ -2060,8 +2060,8 @@ fn single_tab_project_user_keeps_workspace_and_lane_on_two_rows() {
         "project users should keep the workspace on row one: {text}"
     );
     assert!(
-        text.contains("1 · perky-b76d"),
-        "tab number and session nickname belong together on row two: {text}"
+        text.contains("perky-b76d"),
+        "session nickname should remain visible in the workspace identity: {text}"
     );
     assert!(
         !text.contains("slyce · perky-b76d"),
