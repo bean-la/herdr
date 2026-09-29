@@ -1577,7 +1577,7 @@ mod tests {
                 value: "keep-my-session".into(),
             });
             let (events, _rx) = mpsc::channel(32);
-            let (workspaces, terminals, runtimes, _pinned, _pinned_panes) = restore(
+            let (workspaces, terminals, runtimes, pinned, pinned_panes) = restore(
                 &snapshot,
                 None,
                 24,
@@ -1595,7 +1595,15 @@ mod tests {
                 Arc::new(RenderSignal::new()),
             );
             let runtimes = crate::terminal::TerminalRuntimeRegistry::from(runtimes);
-            let captured = crate::persist::capture(&workspaces, &terminals, &runtimes, Some(0), 0);
+            let captured = crate::persist::capture(
+                &workspaces,
+                &terminals,
+                &runtimes,
+                Some(0),
+                0,
+                &pinned,
+                &pinned_panes,
+            );
             assert_eq!(
                 captured.workspaces.len(),
                 2,
@@ -2071,7 +2079,7 @@ mod tests {
         for state_before_handoff in [AgentState::Working, AgentState::Blocked] {
             let (snapshot, _) = snapshot_with_saved_pane_history();
             let (events, _events_rx) = mpsc::channel(32);
-            let (workspaces, mut terminals, runtimes, _pinned, _pinned_panes) = restore(
+            let (workspaces, mut terminals, runtimes, pinned, pinned_panes) = restore(
                 &snapshot,
                 None,
                 24,
@@ -2108,7 +2116,15 @@ mod tests {
             );
             assert_eq!(terminal.state, state_before_handoff);
             let runtimes = crate::terminal::TerminalRuntimeRegistry::from(runtimes);
-            let snapshot = crate::persist::capture(&workspaces, &terminals, &runtimes, Some(0), 0);
+            let snapshot = crate::persist::capture(
+                &workspaces,
+                &terminals,
+                &runtimes,
+                Some(0),
+                0,
+                &pinned,
+                &pinned_panes,
+            );
             let pane_id = workspaces[0].tabs[0].panes.keys().next().copied().unwrap();
             let runtime = runtimes.values().next().unwrap();
             runtime
@@ -2124,7 +2140,7 @@ mod tests {
                     state,
                 },
             )]);
-            let (_, mut restored_terminals, restored_runtimes) = restore_handoff(
+            let (_, mut restored_terminals, restored_runtimes, _, _) = restore_handoff(
                 &snapshot,
                 4096,
                 test_restore_shell(),
