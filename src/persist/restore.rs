@@ -303,12 +303,19 @@ fn restore_pinned_panes(
             .and_then(crate::detect::parse_canonical_agent_label);
         let saved_launch_argv = saved_pane.launch_argv.clone();
         let saved_agent_session = saved_pane.agent_session.as_ref();
+        let saved_agent_resume = saved_pane.agent_resume.as_ref();
         let startup = {
             let mut agent_restore = AgentRestoreState {
                 enabled: runtime_context.resume_agents_on_restore,
                 resumed_sessions: resumed_agent_sessions,
             };
-            pane_restore_startup(saved_agent_session, None, &mut agent_restore)
+            pane_restore_startup(
+                saved_agent_session,
+                saved_agent_resume,
+                &cwd,
+                None,
+                &mut agent_restore,
+            )
         };
         let restored_agent_session =
             restored_terminal_agent_session(saved_agent_session, startup.duplicate_agent_session);

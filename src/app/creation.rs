@@ -391,6 +391,7 @@ impl App {
                 .and_then(|rt| rt.cwd())
                 .map(|cwd| cwd.display().to_string()),
             foreground_cwd: None,
+            restore_error: None,
             label: terminal.manual_label.clone(),
             agent: terminal.effective_agent_label().map(str::to_string),
             title: presentation.title,

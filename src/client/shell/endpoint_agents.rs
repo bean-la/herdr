@@ -184,7 +184,7 @@ fn agent_rows(
             Some(EndpointAgentRow {
                 endpoint_id: endpoint.endpoint_id.clone(),
                 machine_label: endpoint.label.clone(),
-                stale: endpoint.stale(),
+                stale: endpoint.status != ClientEndpointStatus::Online,
                 agent,
             })
         })
