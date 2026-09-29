@@ -188,5 +188,5 @@ fn agent_rows(
                 agent,
             })
         })
-    .collect()
+        .collect()
 }

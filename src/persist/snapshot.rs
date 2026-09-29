@@ -354,12 +354,20 @@ fn capture_pinned(
                             value: session.session_ref.value.clone(),
                         })
                 });
+                let agent_resume = terminal
+                    .and_then(|terminal| terminal.reported_resume())
+                    .map(|resume| PaneAgentResumeSnapshot {
+                        source: resume.source.clone(),
+                        agent: resume.agent.clone(),
+                        argv: resume.argv.clone(),
+                    });
                 Some(PaneSnapshot {
                     cwd,
                     label,
                     agent_name,
                     managed_agent_kind,
                     agent_session,
+                    agent_resume,
                     launch_argv,
                 })
             }),

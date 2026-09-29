@@ -90,7 +90,7 @@ impl App {
             .filter(|candidate| {
                 self.state
                     .terminals
-.get(candidate.terminal_id.as_str())
+                    .get(candidate.terminal_id.as_str())
                     .is_some_and(|terminal| {
                         terminal.agent_name.as_deref() == Some(target)
                             || terminal.effective_agent_label() == Some(target)

@@ -3617,7 +3617,11 @@ mod tests {
     fn fork_build_version_parses_for_update_comparison() {
         assert_eq!(
             Version::parse("0.9.1-78623533"),
-            Some(Version { major: 0, minor: 9, patch: 1 })
+            Some(Version {
+                major: 0,
+                minor: 9,
+                patch: 1
+            })
         );
     }
 
