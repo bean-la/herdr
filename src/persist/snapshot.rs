@@ -317,7 +317,7 @@ fn capture_pinned(
         .map(|pin| PinnedPaneSnapshot {
             side: pin.side,
             ratio: pin.ratio,
-            pane: pinned_panes.get(&pin.pane_id).and_then(|pane| {
+            pane: pinned_panes.get(&pin.pane_id).map(|pane| {
                 let terminal = terminals.get(&pane.attached_terminal_id);
                 let cwd = terminal
                     .map(|t| t.cwd.clone())
@@ -361,7 +361,7 @@ fn capture_pinned(
                         agent: resume.agent.clone(),
                         argv: resume.argv.clone(),
                     });
-                Some(PaneSnapshot {
+                PaneSnapshot {
                     cwd,
                     label,
                     agent_name,
@@ -369,7 +369,7 @@ fn capture_pinned(
                     agent_session,
                     agent_resume,
                     launch_argv,
-                })
+                }
             }),
         })
         .collect()

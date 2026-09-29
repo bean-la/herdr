@@ -282,6 +282,7 @@ mod tests {
     fn row(agent_id: &str, project: &str, alive: bool) -> PresenceRow {
         PresenceRow {
             agent_id: agent_id.into(),
+            session_id: None,
             project: Some(project.into()),
             host: Some("herm-b".into()),
             lane: None,
@@ -325,6 +326,7 @@ mod tests {
     fn remote_agent_never_exposes_pane_id() {
         let row = PresenceRow {
             agent_id: "herm-b-slyce-perky-e9fb".into(),
+            session_id: None,
             project: Some("slyce".into()),
             host: Some("herm-b".into()),
             lane: None,
@@ -390,6 +392,7 @@ mod tests {
         assert_eq!(derive_lane("kooky-b9a3", None), "b9a3");
         let from_suffix_only_api = RemoteAgent::from_row(PresenceRow {
             agent_id: "sebluair-herm-groovy-16be".into(),
+            session_id: None,
             project: Some("herm".into()),
             host: Some("sebluair".into()),
             lane: Some("16be".into()),

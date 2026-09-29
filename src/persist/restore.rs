@@ -62,6 +62,12 @@ type RestoredTab = (
     HashMap<TerminalId, TerminalRuntime>,
     HashMap<PaneId, u32>,
 );
+type RestoredPinnedPanes = (
+    Vec<crate::pinned::PinnedPane>,
+    HashMap<crate::layout::PaneId, crate::pane::PaneState>,
+    Vec<TerminalState>,
+    HashMap<TerminalId, TerminalRuntime>,
+);
 type RestoreFailures<T> = (T, usize);
 
 /// Restore workspaces from a snapshot. Each pane gets a fresh shell in its saved cwd.
@@ -267,12 +273,7 @@ fn restore_pinned_panes(
     cols: u16,
     runtime_context: &RestoreRuntimeContext<'_>,
     resumed_agent_sessions: &mut HashSet<String>,
-) -> (
-    Vec<crate::pinned::PinnedPane>,
-    HashMap<crate::layout::PaneId, crate::pane::PaneState>,
-    Vec<TerminalState>,
-    HashMap<TerminalId, TerminalRuntime>,
-) {
+) -> RestoredPinnedPanes {
     let mut pinned = Vec::new();
     let mut pinned_panes = HashMap::new();
     let mut terminals = Vec::new();
@@ -339,11 +340,10 @@ fn restore_pinned_panes(
             if let Some(session) = restored_agent_session {
                 terminal.set_persisted_agent_session(session);
             }
-            match (saved_agent_name, saved_managed_agent) {
-                (Some(agent_name), Some(agent)) => {
-                    terminal.restore_managed_agent(agent_name, agent)
-                }
-                _ => {}
+            if let (Some(agent_name), Some(agent)) =
+                (saved_agent_name, saved_managed_agent)
+            {
+                terminal.restore_managed_agent(agent_name, agent);
             }
             if let Some(agent) = initial_restore_agent {
                 let _ = terminal.set_detected_state_with_screen_signals_at(
@@ -386,11 +386,10 @@ fn restore_pinned_panes(
                     if let Some(session) = restored_agent_session {
                         terminal.set_persisted_agent_session(session);
                     }
-                    match (saved_agent_name, saved_managed_agent) {
-                        (Some(agent_name), Some(agent)) => {
-                            terminal.restore_managed_agent(agent_name, agent)
-                        }
-                        _ => {}
+                    if let (Some(agent_name), Some(agent)) =
+                        (saved_agent_name, saved_managed_agent)
+                    {
+                        terminal.restore_managed_agent(agent_name, agent);
                     }
                     if let Some(agent) = initial_restore_agent {
                         let _ = terminal.set_detected_state_with_screen_signals_at(
@@ -1581,7 +1580,7 @@ mod tests {
                 value: "keep-my-session".into(),
             });
             let (events, _rx) = mpsc::channel(32);
-            let (workspaces, terminals, runtimes) = restore(
+            let (workspaces, terminals, runtimes, _pinned, _pinned_panes) = restore(
                 &snapshot,
                 None,
                 24,
@@ -2075,7 +2074,7 @@ mod tests {
         for state_before_handoff in [AgentState::Working, AgentState::Blocked] {
             let (snapshot, _) = snapshot_with_saved_pane_history();
             let (events, _events_rx) = mpsc::channel(32);
-            let (workspaces, mut terminals, runtimes) = restore(
+            let (workspaces, mut terminals, runtimes, _pinned, _pinned_panes) = restore(
                 &snapshot,
                 None,
                 24,
@@ -2264,7 +2263,7 @@ mod tests {
             }
             let history = serde_json::from_value(value).unwrap();
             let (events, _rx) = mpsc::channel(8);
-            let (_, _, runtimes) = restore(
+            let (_, _, runtimes, _, _) = restore(
                 &snapshot,
                 Some(&history),
                 5,
