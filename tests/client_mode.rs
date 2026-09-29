@@ -1029,7 +1029,7 @@ fn federated_client_starts_without_local_and_survives_its_restart() {
     fs::create_dir_all(config_home.join(app_dir_name())).unwrap();
     fs::write(
         config_home.join(app_dir_name()).join("config.toml"),
-        "onboarding = false\n\n[keys]\nprevious_workspace = \"ctrl+p\"\n",
+        "onboarding = false\n",
     )
     .unwrap();
     let catalog_dir = runtime_dir
@@ -1169,6 +1169,11 @@ exec /bin/sh -c "$last"
         Duration::from_millis(20),
         || screen_text().contains("local-online")
     ));
+    assert!(wait_until(
+        Duration::from_secs(10),
+        Duration::from_millis(20),
+        || screen_text().contains("local-returned")
+    ));
 
     local.child.kill().unwrap();
     local.close_master();
@@ -1238,7 +1243,9 @@ exec /bin/sh -c "$last"
             "failed to stop root bridge process {bridge}"
         );
         let _resume_bridge = ResumeBridge(bridge);
-        input.write_all(b"\x10").unwrap();
+        input
+            .write_all(&sidebar_row_click(&screen_text(), "local-returned"))
+            .unwrap();
         assert!(
             wait_until(Duration::from_secs(3), Duration::from_millis(20), || {
                 screen_text().contains("LOCAL_WHILE_REMOTE_STALLED")
