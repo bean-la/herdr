@@ -158,6 +158,9 @@ impl PaneLaunchEnv {
 }
 
 fn apply_pane_launch_env(cmd: &mut CommandBuilder, launch_env: &PaneLaunchEnv) {
+    // The Brndr server may hold the Herm-core credential for read-only
+    // presence polling. Never expose it to agent shells or other pane children.
+    cmd.env_remove("HERM_CORE_API_TOKEN");
     cmd.env_remove("CODEX_THREAD_ID");
     // OMP sets OMPCODE for shells it spawns. A pane launched from inside OMP
     // must not inherit it or its root agent would look like a nested session.
@@ -3565,6 +3568,16 @@ mod tests {
         };
         assert_eq!(patch.rows.len(), 5);
         assert!(patch.rows.iter().all(|(_, cells)| cells.len() == 24));
+    }
+
+    #[test]
+    fn pane_launch_env_removes_herm_core_api_token() {
+        let mut cmd = CommandBuilder::new("shell");
+        cmd.env("HERM_CORE_API_TOKEN", "secret");
+
+        apply_pane_launch_env(&mut cmd, &PaneLaunchEnv::default());
+
+        assert!(cmd.get_env("HERM_CORE_API_TOKEN").is_none());
     }
 
     #[test]

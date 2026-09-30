@@ -13,7 +13,18 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 use serde::Deserialize;
+use std::sync::OnceLock;
 use std::time::Duration;
+
+static PRESENCE_API_TOKEN: OnceLock<String> = OnceLock::new();
+
+/// Capture the service credential before worker threads or child processes start.
+/// Keep it in-process rather than leaving it in the environment inherited by children.
+pub(crate) fn initialize_api_token() {
+    let token = std::env::var("HERM_CORE_API_TOKEN").unwrap_or_default();
+    std::env::remove_var("HERM_CORE_API_TOKEN");
+    let _ = PRESENCE_API_TOKEN.set(token);
+}
 
 /// One row from herm-core `GET /v1/agent-presence` → `{ agents: [...] }`.
 /// We only deserialize the read-only surface; we deliberately IGNORE any
@@ -57,7 +68,7 @@ pub struct PresenceRow {
     pub runtime: Option<serde_json::Value>,
     #[serde(default)]
     pub context: Option<serde_json::Value>,
-    // Deliberately NOT deserialized: pane_id / session_id / control token.
+    // Deliberately NOT deserialized: pane_id / control token.
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, serde::Serialize)]
@@ -70,6 +81,7 @@ struct PresenceEnvelope {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct RemoteAgent {
     pub agent_id: String,
+    #[serde(skip_serializing)]
     pub session_id: Option<String>,
     pub host: Option<String>,
     pub project: String,
@@ -253,17 +265,26 @@ fn presence_api_base() -> String {
 /// HTTPS API; on the VPS it stays loopback. `HERM_CORE_API_TOKEN` authenticates.
 /// Failures degrade to the last known rows.
 pub fn fetch_presence(timeout: Duration) -> Result<Vec<RemoteAgent>, String> {
-    let base = presence_api_base();
-    let token = std::env::var("HERM_CORE_API_TOKEN").unwrap_or_default();
     let include_recent = std::env::var("HERDR_PRESENCE_INCLUDE_RECENT")
         .map(|v| v == "1" || v == "true")
         .unwrap_or(false);
+    fetch_presence_from_base(&presence_api_base(), include_recent, timeout)
+}
 
+fn fetch_presence_from_base(
+    base: &str,
+    include_recent: bool,
+    timeout: Duration,
+) -> Result<Vec<RemoteAgent>, String> {
+    let token = PRESENCE_API_TOKEN
+        .get()
+        .map(String::as_str)
+        .unwrap_or_default();
     let agent = ureq::AgentBuilder::new().timeout(timeout).build();
 
     let mut req = agent.get(&format!("{base}/v1/agent-presence"));
     if !token.is_empty() {
-        req = req.set("X-API-Token", token.as_str());
+        req = req.set("X-API-Token", token);
     }
 
     let body = req
@@ -281,6 +302,7 @@ mod tests {
 
     fn row(agent_id: &str, project: &str, alive: bool) -> PresenceRow {
         PresenceRow {
+            session_id: None,
             agent_id: agent_id.into(),
             project: Some(project.into()),
             host: Some("herm-b".into()),
@@ -305,6 +327,97 @@ mod tests {
     }
 
     #[test]
+    fn fetch_presence_uses_the_captured_token() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::time::Duration;
+
+        assert!(PRESENCE_API_TOKEN.set("fixture-token".into()).is_ok());
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (request_tx, request_rx) = std::sync::mpsc::channel();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut byte = [0; 1];
+            while !request.ends_with(b"\r\n\r\n") {
+                let count = stream.read(&mut byte).unwrap();
+                assert_ne!(count, 0, "client closed before sending HTTP headers");
+                request.push(byte[0]);
+                assert!(request.len() < 8192, "unexpectedly large HTTP header");
+            }
+            request_tx
+                .send(String::from_utf8(request).unwrap())
+                .unwrap();
+            let body = br#"{"agents":[{"agent_id":"herm-b-slyce-perky-e9fb","project":"slyce","host":"herm-b","effective_status":"working","process_alive":true,"stream_alive":true,"lifecycle":"active","idle":false}]}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(body).unwrap();
+        });
+
+        let agents =
+            fetch_presence_from_base(&format!("http://{address}"), false, Duration::from_secs(2))
+                .unwrap();
+        let request = request_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        server.join().unwrap();
+        assert!(request
+            .to_ascii_lowercase()
+            .contains("x-api-token: fixture-token"));
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].agent_id, "herm-b-slyce-perky-e9fb");
+    }
+
+    #[test]
+    fn initialize_api_token_keeps_credential_out_of_child_environment() {
+        const MODE: &str = "HERDR_TEST_PRESENCE_TOKEN_MODE";
+        match std::env::var(MODE).as_deref() {
+            Ok("verify") => {
+                assert!(std::env::var_os("HERM_CORE_API_TOKEN").is_none());
+            }
+            Ok("capture") => {
+                assert_eq!(std::env::var("HERM_CORE_API_TOKEN").unwrap(), "test-token");
+                initialize_api_token();
+                assert_eq!(
+                    PRESENCE_API_TOKEN.get().map(String::as_str),
+                    Some("test-token")
+                );
+                assert!(std::env::var_os("HERM_CORE_API_TOKEN").is_none());
+                let status = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        "presence::tests::initialize_api_token_keeps_credential_out_of_child_environment",
+                        "--test-threads=1",
+                    ])
+                    .env(MODE, "verify")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .unwrap();
+                assert!(status.success());
+            }
+            _ => {
+                let status = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        "presence::tests::initialize_api_token_keeps_credential_out_of_child_environment",
+                        "--test-threads=1",
+                    ])
+                    .env(MODE, "capture")
+                    .env("HERM_CORE_API_TOKEN", "test-token")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .unwrap();
+                assert!(status.success());
+            }
+        }
+    }
+
+    #[test]
     fn parse_presence_body_filters_stale_unless_recent() {
         let live = row("herm-b-slyce-perky-e9fb", "slyce", true);
         let stale = row("herm-b-slyce-jazzy-3701", "slyce", false);
@@ -324,6 +437,7 @@ mod tests {
     #[test]
     fn remote_agent_never_exposes_pane_id() {
         let row = PresenceRow {
+            session_id: None,
             agent_id: "herm-b-slyce-perky-e9fb".into(),
             project: Some("slyce".into()),
             host: Some("herm-b".into()),
@@ -389,6 +503,7 @@ mod tests {
         );
         assert_eq!(derive_lane("kooky-b9a3", None), "b9a3");
         let from_suffix_only_api = RemoteAgent::from_row(PresenceRow {
+            session_id: None,
             agent_id: "sebluair-herm-groovy-16be".into(),
             project: Some("herm".into()),
             host: Some("sebluair".into()),

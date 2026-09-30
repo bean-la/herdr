@@ -122,6 +122,7 @@ impl App {
             let child =
                 crate::plugin_command::command_for_argv_in_dir(&program, &args, &plugin_root)
                     .envs(env)
+                    .env_remove("HERM_CORE_API_TOKEN")
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .spawn();
