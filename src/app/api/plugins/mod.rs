@@ -931,6 +931,28 @@ mod tests {
         }
     }
 
+    fn read_capture_with_minimum_lines(
+        path: &std::path::Path,
+        minimum_lines: usize,
+        mut pump: impl FnMut(),
+    ) -> String {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            pump();
+            if let Ok(contents) = std::fs::read_to_string(path) {
+                if contents.lines().count() >= minimum_lines {
+                    return contents;
+                }
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "plugin command did not write {minimum_lines} lines to {} within deadline",
+                path.display()
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
     fn write_manifest(root: &std::path::Path) -> std::path::PathBuf {
         std::fs::create_dir_all(root).unwrap();
         let manifest = root.join("herdr-plugin.toml");
@@ -1928,7 +1950,7 @@ command = ["sh", "-c", "printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \"$PWD\" \
         };
         assert!(app.state.plugin_panes.contains_key(&opened_pane_id));
 
-        let text = read_capture_when_ready(&capture, || {});
+        let text = read_capture_with_minimum_lines(&capture, 9, || {});
         let mut lines = text.lines();
         assert_eq!(lines.next(), Some(canonical_path_string(&root).as_str()));
         assert_eq!(lines.next(), Some("example.pane"));
