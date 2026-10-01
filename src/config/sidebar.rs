@@ -449,7 +449,9 @@ impl Default for AgentsSidebarConfig {
                 vec![
                     AgentSidebarToken::Tab,
                     AgentSidebarToken::Agent,
+                    AgentSidebarToken::Custom("kind".into()),
                     AgentSidebarToken::Custom("context".into()),
+                    AgentSidebarToken::Custom("last_seen".into()),
                 ],
             ],
             rows_by_agent: BTreeMap::new(),
@@ -503,7 +505,9 @@ mod tests {
                 vec![
                     AgentSidebarToken::Tab,
                     AgentSidebarToken::Agent,
+                    AgentSidebarToken::Custom("kind".into()),
                     AgentSidebarToken::Custom("context".into()),
+                    AgentSidebarToken::Custom("last_seen".into()),
                 ],
             ]
         );
