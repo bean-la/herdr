@@ -12,7 +12,7 @@ const adminGate = release.jobs["validate-release-source"].steps[0];
 describe("official publishing workflow boundaries", () => {
   test("publishing is tag-only while normal PR CI remains enabled", () => {
     expect(preview.on).toEqual({ push: { tags: ["preview-*"] } });
-    expect(release.on).toEqual({ push: { tags: ["v*"] } });
+    expect(release.on).toEqual({ push: { tags: ["v*", "brndr-v*"] } });
     expect(load("ci").on.pull_request).toBeDefined();
   });
 
@@ -30,7 +30,7 @@ describe("official publishing workflow boundaries", () => {
   test("each publishing job rechecks both actors before using credentials", () => {
     for (const [workflow, names] of [
       [preview, ["preflight", "publish"]],
-      [release, ["validate-release-source", "release", "update-nix-package", "close-released-issues", "update-latest-json"]],
+      [release, ["validate-release-source", "update-nix-package", "close-released-issues", "update-latest-json"]],
     ] as const) {
       for (const name of names) {
         const job = workflow.jobs[name];
@@ -39,6 +39,12 @@ describe("official publishing workflow boundaries", () => {
         expect(job.steps[0]).toEqual(adminGate);
       }
     }
+    const forkRelease = release.jobs.release;
+    expect(forkRelease.if).toContain("github.repository == 'herdrdev/herdr'");
+    expect(forkRelease.if).toContain("github.repository == 'bean-la/herdr'");
+    expect(forkRelease.if).toContain("startsWith(github.ref_name, 'v')");
+    expect(forkRelease.if).toContain("startsWith(github.ref_name, 'brndr-v')");
+    expect(forkRelease.steps[0]).toEqual(adminGate);
     expect(adminGate.run).toContain('"$GITHUB_ACTOR" "$GITHUB_TRIGGERING_ACTOR"');
     expect(adminGate.env.GH_TOKEN).toBe("${{ github.token }}");
     expect(adminGate.run).not.toContain("ogulcancelik");

@@ -14,6 +14,9 @@ cd "$ROOT"
 GITHUB_SHA="$(git rev-parse HEAD)"
 SHORT_SHA="${GITHUB_SHA:0:8}"
 TAG="brndr-${GITHUB_SHA}"
+HERDR_VERSION="$(awk -F '\"' '/^version = / { print $2; exit }' Cargo.toml)"
+HERDR_PROTOCOL="$(sed -n 's/^pub const PROTOCOL_VERSION: u32 = \([0-9][0-9]*\);/\1/p' src/protocol/wire.rs)"
+test -n "$HERDR_VERSION" && test -n "$HERDR_PROTOCOL"
 
 export LIBGHOSTTY_VT_OPTIMIZE="${LIBGHOSTTY_VT_OPTIMIZE:-ReleaseSafe}"
 export LIBGHOSTTY_VT_SIMD="${LIBGHOSTTY_VT_SIMD:-false}"
@@ -45,8 +48,8 @@ build_macos() {
   cp "target/aarch64-apple-darwin/release/brndr" "$OUT_DIR/herdr-macos-aarch64"
   file "$OUT_DIR/herdr-macos-aarch64" > "$OUT_DIR/BUILD_INFO.txt"
   {
-    echo "version=0.9.0"
-    echo "protocol=22"
+    echo "version=$HERDR_VERSION"
+    echo "protocol=$HERDR_PROTOCOL"
     echo "commit=$GITHUB_SHA"
     echo "target=aarch64-apple-darwin"
     echo "libghostty_vt_optimize=$LIBGHOSTTY_VT_OPTIMIZE"
@@ -68,6 +71,8 @@ build_linux() {
     -e RUST_VERSION="$RUST_VERSION" \
     -e OUT_DIR="/work/dist/brndr-publish" \
     -e GITHUB_SHA="$GITHUB_SHA" \
+    -e HERDR_VERSION="$HERDR_VERSION" \
+    -e HERDR_PROTOCOL="$HERDR_PROTOCOL" \
     ubuntu:24.04 \
     bash -euxo pipefail -c '
       apt-get update
@@ -91,8 +96,8 @@ build_linux() {
       (
         cd "$OUT_DIR"
         {
-          echo "version=0.9.0"
-          echo "protocol=22"
+          echo "version=${HERDR_VERSION}"
+          echo "protocol=${HERDR_PROTOCOL}"
           echo "commit=${GITHUB_SHA}"
           sha256sum herdr-linux-x86_64
         } > BUILD_INFO-linux.txt

@@ -78,7 +78,10 @@ jobs:
           HERDR_BUILD_ID="${GITHUB_SHA:0:8}" cargo build --release --locked
           cp target/release/brndr herdr-linux-x86_64
           chmod 0755 herdr-linux-x86_64
-          { echo "version=0.9.0"; echo "protocol=22"; echo "commit=$GITHUB_SHA"; sha256sum herdr-linux-x86_64; } > BUILD_INFO-linux.txt
+          version="$(awk -F '\"' '/^version = / { print $2; exit }' Cargo.toml)"
+          protocol="$(sed -n 's/^pub const PROTOCOL_VERSION: u32 = \([0-9][0-9]*\);/\1/p' src/protocol/wire.rs)"
+          test -n "$version" && test -n "$protocol"
+          { echo "version=$version"; echo "protocol=$protocol"; echo "commit=$GITHUB_SHA"; sha256sum herdr-linux-x86_64; } > BUILD_INFO-linux.txt
 
       - name: Publish immutable Linux artifact
         env:
@@ -102,12 +105,12 @@ jobs:
             BUILD_INFO-linux.txt
           retention-days: 14
 
-  # macOS build for the laptop, from the SAME settled commit as the herm-b
+  # macOS builds for the laptop, from the SAME settled commit as the herm-b
   # linux build — so brndr --remote's version-match check passes against
-  # herm-b and the laptop brndr-bin stays in lockstep. Fleet laptops are
-  # Publish both Intel and Apple Silicon macOS builds to the rolling
-  # `brndr-latest` release (--latest=false keeps semantic releases as GitHub's
-  # "latest").
+  # herm-b and the laptop brndr-bin stays in lockstep. Cross-compile Intel on
+  # GitHub-hosted macOS so publishing does not depend on a separate self-hosted
+  # machine. Publish both architectures to `brndr-latest` (--latest=false keeps
+  # semantic releases as GitHub's "latest").
   # Steps mirror build-artifacts-manual.yml's build-macos job (same pinned
   # toolchain), with the patched brew zig (see Install step).
   build-macos:
@@ -117,7 +120,7 @@ jobs:
         include:
           - target: x86_64-apple-darwin
             asset: herdr-macos-x86_64
-            os: [self-hosted, macOS, x86_64, sebsixt]
+            os: macos-latest
           - target: aarch64-apple-darwin
             asset: herdr-macos-aarch64
             os: macos-latest
@@ -173,9 +176,12 @@ jobs:
           # the herdr-macos-aarch64 asset name for consistent install URLs.
           cp target/${{ matrix.target }}/release/brndr ${{ matrix.asset }}
           file ${{ matrix.asset }} > BUILD_INFO-${{ matrix.asset }}.txt
+          version="$(awk -F '\"' '/^version = / { print $2; exit }' Cargo.toml)"
+          protocol="$(sed -n 's/^pub const PROTOCOL_VERSION: u32 = \([0-9][0-9]*\);/\1/p' src/protocol/wire.rs)"
+          test -n "$version" && test -n "$protocol"
           {
-            echo "version=0.9.0"
-            echo "protocol=22"
+            echo "version=$version"
+            echo "protocol=$protocol"
             echo "commit=$GITHUB_SHA"
             echo "target=${{ matrix.target }}"
             echo "libghostty_vt_optimize=$LIBGHOSTTY_VT_OPTIMIZE"
