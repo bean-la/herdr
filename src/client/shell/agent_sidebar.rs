@@ -260,7 +260,7 @@ fn effective_scope_workspace_label(snapshot: &ClientShellSnapshot) -> Option<&st
     })
 }
 
-fn agent_matches_scope(
+pub(super) fn agent_matches_scope(
     snapshot: &ClientShellSnapshot,
     agent_workspace_id: &str,
     scope: crate::config::AgentPanelScopeConfig,

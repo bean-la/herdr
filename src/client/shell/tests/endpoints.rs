@@ -1146,6 +1146,131 @@ fn aggregate_agents_use_configured_rows_machine_token_and_status_colors() {
 }
 
 #[test]
+fn aggregate_agent_panel_here_scope_filters_other_local_projects() {
+    use crate::api::schema::AgentStatus;
+    use crate::config::AgentPanelScopeConfig;
+
+    let mut config = Config::default();
+    config.ui.agent_panel_scope = AgentPanelScopeConfig::ActiveWorkspace;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    let profile = remote_profile();
+    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
+    state.set_endpoint_catalog(&[profile]);
+    state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
+
+    let mut local = snapshot();
+    local.workspaces[0].label = "herm".into();
+    let mut other_workspace = local.workspaces[0].clone();
+    other_workspace.workspace_id = "ws_2".into();
+    other_workspace.label = "brodie".into();
+    other_workspace.focused = false;
+    local.workspaces.push(other_workspace);
+
+    let mut other_tab = local.tabs[0].clone();
+    other_tab.tab_id = "tab_2".into();
+    other_tab.workspace_id = "ws_2".into();
+    other_tab.number = 2;
+    other_tab.label = "other-project".into();
+    other_tab.focused = false;
+    local.tabs.push(other_tab);
+
+    let mut other_pane = local.panes[0].clone();
+    other_pane.pane_id = "pane_2".into();
+    other_pane.workspace_id = "ws_2".into();
+    other_pane.tab_id = "tab_2".into();
+    other_pane.focused = false;
+    local.panes.push(other_pane);
+
+    local.remote_agents = vec![crate::protocol::ClientShellRemoteAgent {
+        session_id: None,
+        agent_id: "sebluair-herm-remote-lane".into(),
+        host: Some("sebluair".into()),
+        project: "herm".into(),
+        lane: "remote-lane".into(),
+        status: "working".into(),
+        user: "herm".into(),
+        cwd: None,
+        process_alive: true,
+        stream_alive: true,
+        last_seen_ts: None,
+        session_memo: None,
+        context_usage: None,
+    }];
+    let mut here_agent = agent("here-project-agent", AgentStatus::Working, 1);
+    here_agent.name = Some("here-project-agent".into());
+    let mut other_agent = agent("other-project-agent", AgentStatus::Working, 2);
+    other_agent.pane_id = "pane_2".into();
+    other_agent.workspace_id = "ws_2".into();
+    other_agent.tab_id = "tab_2".into();
+    other_agent.name = Some("other-project-agent".into());
+    other_agent.focused = false;
+    local.agents = vec![here_agent, other_agent];
+    state.set_snapshot(Box::new(local));
+    state.set_pane_surface(surface());
+    state.set_endpoint_snapshot(&endpoint_id, Box::new(snapshot()));
+
+    let frame = state.compose(100, 28).expect("here-scoped aggregate frame");
+    let text = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.contains("here-project-agent"), "frame: {text}");
+    assert!(
+        text.contains("remote-lane"),
+        "remotes should be visible: {text}"
+    );
+    assert!(
+        !text.contains("other-project-agent"),
+        "here scope should exclude agents from other projects: {text}"
+    );
+
+    state.config.agent_panel_remotes = crate::config::AgentPanelRemotesConfig::Hide;
+    let frame = state.compose(100, 28).expect("local-only aggregate frame");
+    let text = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.contains("here-project-agent"), "frame: {text}");
+    assert!(
+        !text.contains("remote-lane"),
+        "local mode hid remotes: {text}"
+    );
+    assert!(
+        !text.contains("other-project-agent"),
+        "here scope should continue hiding other projects: {text}"
+    );
+
+    state.config.agent_panel_scope = AgentPanelScopeConfig::All;
+    state.config.agent_panel_remotes = crate::config::AgentPanelRemotesConfig::Show;
+    let frame = state.compose(100, 28).expect("all-project aggregate frame");
+    let text = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.contains("here-project-agent"), "frame: {text}");
+    assert!(text.contains("other-project-agent"), "frame: {text}");
+    assert!(text.contains("remote-lane"), "frame: {text}");
+}
+
+#[test]
 fn current_workspace_agent_view_excludes_same_workspace_id_on_other_machine() {
     use crate::api::schema::AgentStatus;
     use crate::config::AgentSidebarToken;

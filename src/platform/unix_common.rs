@@ -242,6 +242,7 @@ pub(super) fn read_terminal_grid_size() -> std::io::Result<(u16, u16)> {
     crossterm::terminal::window_size().map(|size| (size.columns, size.rows))
 }
 
+#[cfg(not(test))]
 fn set_sigpipe_disposition(handler: libc::sighandler_t) {
     let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
     action.sa_sigaction = handler;
@@ -253,13 +254,23 @@ fn set_sigpipe_disposition(handler: libc::sighandler_t) {
     }
 }
 
+#[cfg(not(test))]
 pub(crate) fn begin_cli_output() {
     set_sigpipe_disposition(libc::SIG_DFL);
 }
 
+// CLI helpers run in-process in unit tests; don't change the test harness's
+// process-wide SIGPIPE disposition from those calls.
+#[cfg(test)]
+pub(crate) fn begin_cli_output() {}
+
+#[cfg(not(test))]
 pub(crate) fn end_cli_output() {
     set_sigpipe_disposition(libc::SIG_IGN);
 }
+
+#[cfg(test)]
+pub(crate) fn end_cli_output() {}
 
 pub(crate) fn remote_ssh_config_paths() -> super::RemoteSshConfigPaths {
     super::RemoteSshConfigPaths {

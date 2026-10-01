@@ -2747,6 +2747,7 @@ command = ["sh", "-c", "printf '%s' \"$HERDR_PLUGIN_ACTION_ID\""]
     #[cfg(unix)]
     #[test]
     fn manifest_action_invoke_injects_plugin_paths() {
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
         let mut app = test_app();
         let root = unique_temp_path("plugin-action-path-env");
         write_manifest_content(

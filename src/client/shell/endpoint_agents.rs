@@ -145,6 +145,13 @@ fn agent_rows(
             continue;
         };
         for pane_agent in &snapshot.agents {
+            if !super::agent_sidebar::agent_matches_scope(
+                snapshot,
+                pane_agent.workspace_id.as_str(),
+                config.agent_panel_scope,
+            ) {
+                continue;
+            }
             if let Some(row) = super::agent_sidebar::agent_row(
                 snapshot,
                 &pane_agent.pane_id,
