@@ -347,6 +347,12 @@ fn render_integrations(
         if y >= area.bottom() {
             break;
         }
+        let selected = index == settings.selected;
+        let row_bg = if selected {
+            palette.surface0
+        } else {
+            palette.panel_bg
+        };
         let (marker, color, status) = match integration.state {
             crate::api::schema::IntegrationState::Current => ("✓", palette.green, "installed"),
             crate::api::schema::IntegrationState::Outdated => {
@@ -365,7 +371,9 @@ fn render_integrations(
             y,
             3,
             &format!(" {marker}"),
-            Style::default().fg(color).bg(palette.panel_bg),
+            Style::default()
+                .fg(if selected { palette.accent } else { color })
+                .bg(row_bg),
         );
         put_text(
             buffer,
@@ -373,7 +381,13 @@ fn render_integrations(
             y,
             11.min(area.width.saturating_sub(3)),
             &format!("{:<9}", integration.label),
-            Style::default().fg(palette.subtext0).bg(palette.panel_bg),
+            Style::default()
+                .fg(if selected {
+                    palette.text
+                } else {
+                    palette.subtext0
+                })
+                .bg(row_bg),
         );
         put_text(
             buffer,
@@ -381,7 +395,13 @@ fn render_integrations(
             y,
             area.width.saturating_sub(14),
             status,
-            Style::default().fg(palette.overlay1).bg(palette.panel_bg),
+            Style::default()
+                .fg(if selected {
+                    palette.text
+                } else {
+                    palette.overlay1
+                })
+                .bg(row_bg),
         );
     }
     let message_y = area
