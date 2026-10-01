@@ -139,18 +139,32 @@ fn agent_rows(
     active_endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
 ) -> Vec<EndpointAgentRow> {
-    let mut rendered_rows = endpoints
-        .iter()
-        .filter_map(|endpoint| {
-            endpoint.snapshot.as_deref().map(|snapshot| {
-                super::agent_sidebar::agent_rows(snapshot, config, Some(&endpoint.label))
-                    .into_iter()
-                    .map(|agent| ((endpoint.endpoint_id.clone(), agent.pane_id.clone()), agent))
-                    .collect::<Vec<_>>()
-            })
-        })
-        .flatten()
-        .collect::<HashMap<_, _>>();
+    let mut rendered_rows = HashMap::new();
+    for endpoint in endpoints {
+        let Some(snapshot) = endpoint.snapshot.as_deref() else {
+            continue;
+        };
+        for pane_agent in &snapshot.agents {
+            if let Some(row) = super::agent_sidebar::agent_row(
+                snapshot,
+                &pane_agent.pane_id,
+                config,
+                Some(endpoint.label.as_str()),
+            ) {
+                rendered_rows.insert((endpoint.endpoint_id.clone(), row.pane_id.clone()), row);
+            }
+        }
+        for row in super::agent_sidebar::agent_rows(snapshot, config, Some(&endpoint.label)) {
+            if snapshot
+                .agents
+                .iter()
+                .any(|pane_agent| pane_agent.pane_id == row.pane_id)
+            {
+                continue;
+            }
+            rendered_rows.insert((endpoint.endpoint_id.clone(), row.pane_id.clone()), row);
+        }
+    }
     let mut ordered_keys = Vec::new();
 
     // Aggregate navigation orders pane-backed agents. Presence and lane-tab rows
@@ -166,7 +180,11 @@ fn agent_rows(
         if let Some(snapshot) = endpoint.snapshot.as_deref() {
             for agent in super::agent_sidebar::agent_rows(snapshot, config, Some(&endpoint.label)) {
                 let key = (endpoint.endpoint_id.clone(), agent.pane_id.clone());
-                if !ordered_keys.contains(&key) {
+                let is_pane_backed = snapshot
+                    .agents
+                    .iter()
+                    .any(|pane_agent| pane_agent.pane_id == agent.pane_id);
+                if !is_pane_backed && !ordered_keys.contains(&key) {
                     ordered_keys.push(key);
                 }
             }
