@@ -296,6 +296,7 @@ impl App {
             .stderr(Stdio::null());
         let (env, cwd) = self.custom_command_env();
         command.envs(env);
+        command.env_remove("HERM_CORE_API_TOKEN");
         if let Some(cwd) = cwd {
             command.current_dir(cwd);
         }
